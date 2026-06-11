@@ -16,6 +16,7 @@ add_executable(WenzGuard
     src/alert.cpp
     src/logger.cpp
     src/process_scanner.cpp
+    src/honeypot.cpp
 )
 
 target_include_directories(WenzGuard PRIVATE include)
