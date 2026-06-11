@@ -81,6 +81,8 @@ inline const std::vector<std::wstring> SAFE_LOCATIONS = {
 
 bool is_browser_process(const std::wstring& process_name);
 bool is_suspicious_process(const std::wstring& process_name);
+bool is_safe_location(const std::wstring& path);
+bool is_suspicious_location(const std::wstring& path);
 
 // One-shot scan
 std::vector<SuspiciousProcess> scan_suspicious_processes();
