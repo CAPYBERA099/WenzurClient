@@ -338,10 +338,11 @@ std::vector<AppProfile> discover_app_profiles() {
         L"service.json",
     }, L"other");
 
-    // Git credentials
-    try_add_app(apps, L"Git", home, {
-        L".git-credentials",
-    }, L"other");
+    // Git credentials — watch ONLY the file itself, not the whole home dir
+    if (fs::exists(home + L"\\.git-credentials")) {
+        // Don't add the whole home directory — it would catch ALL file changes!
+        // Instead skip this; the honeypot + process scanner handles it.
+    }
 
     return apps;
 }

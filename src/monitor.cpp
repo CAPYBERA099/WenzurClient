@@ -11,34 +11,27 @@ namespace fs = std::filesystem;
 
 // Файлы которые вызывают тревогу при изменении
 static const std::vector<std::wstring> CRITICAL_FILES = {
-    // Браузеры
+    // Browsers
     L"cookies", L"login data", L"web data", L"local state",
     L"cookies-journal", L"login data-journal",
     L"cookies.sqlite", L"logins.json", L"key4.db", L"key3.db",
-    L"current session", L"current tabs", L"last session", L"last tabs",
-    L"extension cookies", L"sessionstore.jsonlz4", L"recovery.jsonlz4",
+    L"extension cookies", L"sessionstore.jsonlz4",
     // Telegram
-    L"key_datas", L"key_data", L"map0", L"map1",
-    L"d877f783d5d3ef8c", L"d877f783d5d3ef8cs",
-    L"a7fdf864fbc10b77", L"a7fdf864fbc10b77s",
-    // Discord
-    L".ldb", L".log", L"current", L"manifest",
+    L"key_datas", L"key_data",
+    // Discord (only .ldb in discord paths — checked via browser_name)
+    L".ldb",
     // Steam
-    L"ssfn", L"loginusers.vdf", L"config.vdf",
+    L"ssfn", L"loginusers.vdf",
     // Minecraft
-    L"launcher_accounts.json", L"launcher_profiles.json",
-    // Крипто
-    L"seed.seco", L"passphrase.json", L"seed.json", L"info.seco",
-    L"default_wallet",
+    L"launcher_accounts.json",
+    // Crypto
+    L"seed.seco", L"seed.json", L"default_wallet",
     // FTP/SSH
     L"recentservers.xml", L"sitemanager.xml",
-    L"winscp.ini",
     // Git
     L".git-credentials",
-    // VPN
-    L".ovpn", L"user.config",
-    // Прочее
-    L"service.json", L"auth_token", L"config.json",
+    // Honeypot canaries (always match)
+    L".wgcanary", L"canary",
 };
 
 SessionMonitor::SessionMonitor() {}

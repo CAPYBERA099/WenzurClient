@@ -330,8 +330,9 @@ int wmain(int argc, wchar_t* argv[]) {
     monitor.start();
 
     // Cleanup
-    printf("\n  Cleaning up honeypots...\n");
+    printf("\n  Cleaning up...\n");
     cleanup_honeypots(honeypots);
+    cleanup_tray();
     g_monitor = nullptr;
     printf("  WenzGuard stopped.\n");
     return 0;
