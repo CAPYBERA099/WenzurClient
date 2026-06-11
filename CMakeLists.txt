@@ -29,8 +29,9 @@ target_link_libraries(WenzGuard PRIVATE
     shlwapi
 )
 
-# Unicode
+# Unicode + UTF-8 source encoding
 target_compile_definitions(WenzGuard PRIVATE UNICODE _UNICODE)
+target_compile_options(WenzGuard PRIVATE /utf-8)
 
 # Оптимизация для Release
 if(CMAKE_BUILD_TYPE STREQUAL "Release")

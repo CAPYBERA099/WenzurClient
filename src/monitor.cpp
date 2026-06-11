@@ -162,12 +162,12 @@ void SessionMonitor::watch_directory(const std::wstring& path, const std::wstrin
             if (is_sensitive_file(filename)) {
                 std::wstring action;
                 switch (fni->Action) {
-                    case FILE_ACTION_ADDED:            action = L"СОЗДАН"; break;
-                    case FILE_ACTION_REMOVED:          action = L"УДАЛЁН"; break;
-                    case FILE_ACTION_MODIFIED:         action = L"ИЗМЕНЁН"; break;
-                    case FILE_ACTION_RENAMED_OLD_NAME: action = L"ПЕРЕИМЕНОВАН (старое)"; break;
-                    case FILE_ACTION_RENAMED_NEW_NAME: action = L"ПЕРЕИМЕНОВАН (новое)"; break;
-                    default:                           action = L"НЕИЗВЕСТНО";
+                    case FILE_ACTION_ADDED:            action = L"CREATED"; break;
+                    case FILE_ACTION_REMOVED:          action = L"DELETED"; break;
+                    case FILE_ACTION_MODIFIED:         action = L"MODIFIED"; break;
+                    case FILE_ACTION_RENAMED_OLD_NAME: action = L"RENAMED"; break;
+                    case FILE_ACTION_RENAMED_NEW_NAME: action = L"RENAMED"; break;
+                    default:                           action = L"ACCESSED";
                 }
 
                 FileEvent event;

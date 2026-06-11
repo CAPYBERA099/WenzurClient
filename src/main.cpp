@@ -1,12 +1,10 @@
 /*
- *  WenzGuard — Монитор безопасности сессий
+ *  WenzGuard v2.1 — Session Security Monitor
+ *  Monitors browser, messenger, gaming and crypto sessions.
+ *  Alerts via Windows toast notifications.
  *
- *  Следит за сессиями браузеров, мессенджеров, игровых платформ,
- *  крипто-кошельков и других программ. При подозрительном обращении
- *  к файлам сессий — уведомляет пользователя.
- *
- *  Сборка: cmake -B build && cmake --build build --config Release
- *  Запуск: WenzGuard.exe [--silent] [--scan-only]
+ *  Build:  cmake -B build && cmake --build build --config Release
+ *  Run:    WenzGuard.exe [--silent] [--scan-only]
  */
 
 #include <windows.h>
@@ -16,6 +14,7 @@
 #include <atomic>
 #include <algorithm>
 #include <map>
+#include <chrono>
 
 #include "browser_paths.h"
 #include "monitor.h"
@@ -28,7 +27,6 @@ static SessionMonitor* g_monitor = nullptr;
 
 BOOL WINAPI console_handler(DWORD signal) {
     if (signal == CTRL_C_EVENT || signal == CTRL_CLOSE_EVENT) {
-        std::wcout << L"\n[WenzGuard] Остановка..." << std::endl;
         g_running.store(false);
         if (g_monitor) g_monitor->stop();
         return TRUE;
@@ -37,39 +35,31 @@ BOOL WINAPI console_handler(DWORD signal) {
 }
 
 void print_banner() {
-    // Устанавливаем кодировку консоли для русского текста
-    SetConsoleOutputCP(1251);
-    SetConsoleCP(1251);
+    SetConsoleOutputCP(65001);
+    SetConsoleCP(65001);
 
-    std::wcout << L"\n";
-    std::wcout << L"  =============================\n";
-    std::wcout << L"   W E N Z   G U A R D  v2.0\n";
-    std::wcout << L"  =============================\n";
-    std::wcout << L"\n";
+    printf("\n");
+    printf("  =============================\n");
+    printf("   W E N Z   G U A R D  v2.1\n");
+    printf("  =============================\n");
+    printf("  Session Security Monitor\n\n");
 }
 
 void run_process_scan() {
-    Logger::instance().info(L"Сканирование процессов...");
     auto suspicious = scan_suspicious_processes();
 
-    if (suspicious.empty()) {
-        Logger::instance().info(L"Подозрительных процессов не обнаружено ✓");
-    } else {
-        for (const auto& proc : suspicious) {
-            std::wstring msg = L"⚠ ПОДОЗРИТЕЛЬНЫЙ: " + proc.name +
-                               L" (PID: " + std::to_wstring(proc.pid) + L") — " + proc.reason;
-            if (!proc.path.empty()) msg += L" | " + proc.path;
-            Logger::instance().alert(msg);
+    if (suspicious.empty()) return;
 
-            std::wstring lower = proc.name;
-            std::transform(lower.begin(), lower.end(), lower.begin(), ::towlower);
-            if (KNOWN_STEALERS.count(lower) > 0) {
-                play_alarm_sound();
-                show_notification(
-                    L"STEALER DETECTED!",
-                    proc.name + L" (PID " + std::to_wstring(proc.pid) + L")\n" + proc.path
-                );
-            }
+    for (const auto& proc : suspicious) {
+        std::wstring lower = proc.name;
+        std::transform(lower.begin(), lower.end(), lower.begin(), ::towlower);
+
+        if (KNOWN_STEALERS.count(lower) > 0) {
+            play_alarm_sound();
+            show_notification(
+                L"STEALER FOUND: " + proc.name,
+                L"PID " + std::to_wstring(proc.pid) + L"\n" + proc.path
+            );
         }
     }
 }
@@ -82,13 +72,61 @@ void periodic_scan_thread() {
     }
 }
 
-// Категория -> иконка для вывода
-std::wstring category_icon(const std::wstring& cat) {
-    if (cat == L"messenger") return L"[MSG]";
-    if (cat == L"gaming")    return L"[GAME]";
-    if (cat == L"crypto")    return L"[CRYPTO]";
-    if (cat == L"vpn")       return L"[VPN]";
-    return L"[APP]";
+// What was stolen — short label
+std::wstring detect_stolen_type(const std::wstring& path) {
+    std::wstring p = path;
+    std::transform(p.begin(), p.end(), p.begin(), ::towlower);
+
+    if (p.find(L"local state") != std::wstring::npos)         return L"MASTER KEY";
+    if (p.find(L"login data") != std::wstring::npos)           return L"PASSWORDS";
+    if (p.find(L"cookies") != std::wstring::npos)              return L"COOKIES";
+    if (p.find(L"key_data") != std::wstring::npos)             return L"TELEGRAM SESSION";
+    if (p.find(L"d877f783d5d3ef8c") != std::wstring::npos)     return L"TELEGRAM SESSION";
+    if (p.find(L"a7fdf864fbc10b77") != std::wstring::npos)     return L"TELEGRAM SESSION";
+    if (p.find(L"discord") != std::wstring::npos && p.find(L".ldb") != std::wstring::npos)
+                                                                return L"DISCORD TOKEN";
+    if (p.find(L"ssfn") != std::wstring::npos)                 return L"STEAM GUARD";
+    if (p.find(L"loginusers.vdf") != std::wstring::npos)       return L"STEAM ACCOUNT";
+    if (p.find(L"config.vdf") != std::wstring::npos)           return L"STEAM CONFIG";
+    if (p.find(L"seed") != std::wstring::npos)                 return L"CRYPTO SEED";
+    if (p.find(L"wallet") != std::wstring::npos)               return L"CRYPTO WALLET";
+    if (p.find(L".git-credentials") != std::wstring::npos)     return L"GIT CREDENTIALS";
+    if (p.find(L"key4.db") != std::wstring::npos)              return L"FIREFOX KEYS";
+    if (p.find(L"logins.json") != std::wstring::npos)          return L"FIREFOX PASSWORDS";
+    if (p.find(L"web data") != std::wstring::npos)             return L"AUTOFILL / CARDS";
+    if (p.find(L"session") != std::wstring::npos)              return L"SESSION";
+    if (p.find(L"tabs") != std::wstring::npos)                 return L"TABS";
+    if (p.find(L"history") != std::wstring::npos)              return L"HISTORY";
+    return L"SESSION DATA";
+}
+
+// Is this a critical file worth alerting about?
+bool is_critical_file(const std::wstring& path) {
+    std::wstring p = path;
+    std::transform(p.begin(), p.end(), p.begin(), ::towlower);
+
+    return p.find(L"cookies") != std::wstring::npos
+        || p.find(L"login data") != std::wstring::npos
+        || p.find(L"local state") != std::wstring::npos
+        || p.find(L"key4.db") != std::wstring::npos
+        || p.find(L"logins.json") != std::wstring::npos
+        || p.find(L"key_data") != std::wstring::npos
+        || p.find(L"d877f783d5d3ef8c") != std::wstring::npos
+        || (p.find(L"discord") != std::wstring::npos && p.find(L".ldb") != std::wstring::npos)
+        || p.find(L"ssfn") != std::wstring::npos
+        || p.find(L"loginusers.vdf") != std::wstring::npos
+        || p.find(L"seed") != std::wstring::npos
+        || p.find(L"wallet") != std::wstring::npos
+        || p.find(L".git-credentials") != std::wstring::npos
+        || p.find(L"web data") != std::wstring::npos;
+}
+
+// Extract just the filename from full path
+std::wstring short_filename(const std::wstring& full_path) {
+    auto pos = full_path.find_last_of(L"\\");
+    if (pos != std::wstring::npos)
+        return full_path.substr(pos + 1);
+    return full_path;
 }
 
 int wmain(int argc, wchar_t* argv[]) {
@@ -100,10 +138,10 @@ int wmain(int argc, wchar_t* argv[]) {
         if (arg == L"--silent" || arg == L"-s") silent = true;
         if (arg == L"--scan-only" || arg == L"--scan") scan_only = true;
         if (arg == L"--help" || arg == L"-h") {
-            std::wcout << L"WenzGuard — Монитор безопасности сессий v2.0\n\n";
-            std::wcout << L"  --silent, -s     Без всплывающих окон\n";
-            std::wcout << L"  --scan-only      Только сканирование процессов\n";
-            std::wcout << L"  --help, -h       Справка\n";
+            printf("WenzGuard v2.1 - Session Security Monitor\n\n");
+            printf("  --silent, -s     No notifications (log only)\n");
+            printf("  --scan-only      Scan processes and exit\n");
+            printf("  --help, -h       This help\n");
             return 0;
         }
     }
@@ -111,177 +149,111 @@ int wmain(int argc, wchar_t* argv[]) {
     print_banner();
     SetConsoleCtrlHandler(console_handler, TRUE);
 
-    // Логгер
+    // Logger
     wchar_t exe_path[MAX_PATH];
     GetModuleFileNameW(NULL, exe_path, MAX_PATH);
     std::wstring log_path = exe_path;
     log_path = log_path.substr(0, log_path.find_last_of(L'\\') + 1) + L"wenzguard.log";
     Logger::instance().init(log_path);
-    Logger::instance().info(L"WenzGuard v2.0 запущен");
 
-    // ===== Обнаружение =====
-
-    // 1. Браузеры
+    // Discover profiles
     auto browsers = discover_browser_profiles();
-    // 2. Программы и мессенджеры
     auto apps = discover_app_profiles();
-
     int total = (int)browsers.size() + (int)apps.size();
 
     if (total == 0) {
-        Logger::instance().warn(L"Ничего не найдено для мониторинга!");
+        printf("  Nothing found to monitor.\n");
         return 1;
     }
 
-    // Вывод найденного
-    std::wcout << L"  ── Браузеры (" << browsers.size() << L") ──\n";
+    // Print discovered
+    printf("  Browsers: %d\n", (int)browsers.size());
     for (const auto& b : browsers) {
-        std::wcout << L"  🌐 " << b.browser_name << L"\n";
+        printf("    [WEB] %ls\n", b.browser_name.c_str());
     }
 
-    // Группируем приложения по категориям
-    std::map<std::wstring, std::vector<const AppProfile*>> by_category;
-    for (const auto& a : apps) {
-        by_category[a.category].push_back(&a);
-    }
+    // Group apps by category
+    std::map<std::wstring, std::vector<const AppProfile*>> by_cat;
+    for (const auto& a : apps) by_cat[a.category].push_back(&a);
 
-    const std::vector<std::pair<std::wstring, std::wstring>> category_names = {
-        { L"messenger", L"Мессенджеры" },
-        { L"gaming",    L"Игровые платформы" },
-        { L"crypto",    L"Крипто-кошельки" },
-        { L"vpn",       L"VPN" },
-        { L"other",     L"Другие" },
+    struct { const wchar_t* id; const char* name; } cats[] = {
+        { L"messenger", "Messengers" },
+        { L"gaming",    "Gaming" },
+        { L"crypto",    "Crypto" },
+        { L"vpn",       "VPN" },
+        { L"other",     "Other" },
     };
 
-    for (const auto& [cat_id, cat_name] : category_names) {
-        auto it = by_category.find(cat_id);
-        if (it == by_category.end()) continue;
-
-        std::wcout << L"\n  ── " << cat_name << L" (" << it->second.size() << L") ──\n";
+    for (auto& [id, name] : cats) {
+        auto it = by_cat.find(id);
+        if (it == by_cat.end()) continue;
+        printf("\n  %s: %d\n", name, (int)it->second.size());
         for (const auto* a : it->second) {
-            std::wcout << L"  " << category_icon(cat_id) << L" " << a->app_name << L"\n";
+            printf("    [+] %ls\n", a->app_name.c_str());
         }
     }
 
-    std::wcout << L"\n  Всего: " << total << L" профилей\n\n";
+    printf("\n  Total: %d profiles\n\n", total);
 
-    // Сканирование процессов
+    // Process scan
     run_process_scan();
 
     if (scan_only) {
-        std::wcout << L"\n  Сканирование завершено.\n";
+        printf("  Scan complete.\n");
         return 0;
     }
 
-    // ===== Мониторинг =====
-
+    // Setup monitoring
     SessionMonitor monitor;
     g_monitor = &monitor;
 
     for (const auto& b : browsers) {
-        monitor.add_watch(b.profile_path, L"🌐 " + b.browser_name);
+        monitor.add_watch(b.profile_path, b.browser_name);
     }
     for (const auto& a : apps) {
-        monitor.add_watch(a.profile_path, category_icon(a.category) + L" " + a.app_name);
+        monitor.add_watch(a.profile_path, a.app_name);
     }
 
-    // Подавление спама
+    // Throttle
     static auto last_alert_time = std::chrono::steady_clock::now();
 
     monitor.set_alert_callback([&](const FileEvent& event) {
-        std::wstring lower_path = event.file_path;
-        std::transform(lower_path.begin(), lower_path.end(), lower_path.begin(), ::towlower);
+        // Log everything
+        Logger::instance().info(L"[" + event.browser_name + L"] " + event.action + L": " + event.file_path);
 
-        // Определяем критичность
-        bool is_critical =
-            // Браузеры
-            lower_path.find(L"cookies") != std::wstring::npos ||
-            lower_path.find(L"login data") != std::wstring::npos ||
-            lower_path.find(L"local state") != std::wstring::npos ||
-            lower_path.find(L"key4.db") != std::wstring::npos ||
-            lower_path.find(L"logins.json") != std::wstring::npos ||
-            // Telegram
-            lower_path.find(L"key_data") != std::wstring::npos ||
-            lower_path.find(L"d877f783d5d3ef8c") != std::wstring::npos ||
-            // Discord
-            (lower_path.find(L"discord") != std::wstring::npos && lower_path.find(L".ldb") != std::wstring::npos) ||
-            // Steam
-            lower_path.find(L"ssfn") != std::wstring::npos ||
-            lower_path.find(L"loginusers.vdf") != std::wstring::npos ||
-            // Крипто
-            lower_path.find(L"seed.seco") != std::wstring::npos ||
-            lower_path.find(L"default_wallet") != std::wstring::npos ||
-            // Git
-            lower_path.find(L".git-credentials") != std::wstring::npos;
+        // Only alert on critical files
+        if (!is_critical_file(event.file_path)) return;
+        if (silent) return;
 
-        bool is_session =
-            lower_path.find(L"session") != std::wstring::npos ||
-            lower_path.find(L"tabs") != std::wstring::npos ||
-            lower_path.find(L"tdata") != std::wstring::npos ||
-            lower_path.find(L"map0") != std::wstring::npos ||
-            lower_path.find(L"config.vdf") != std::wstring::npos;
-
-        std::wstring log_msg = L"[" + event.browser_name + L"] " +
-                               event.action + L": " + event.file_path;
-
-        if (is_critical) {
-            Logger::instance().alert(L"[!!!] " + log_msg);
-        } else if (is_session) {
-            Logger::instance().warn(L"[!!] " + log_msg);
-        } else {
-            Logger::instance().info(L"[i] " + log_msg);
-        }
-
-        // Уведомление (не чаще раз в 3 сек)
+        // Throttle: max 1 notification per 3 seconds
         auto now = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - last_alert_time).count();
+        if (elapsed < 3) return;
+        last_alert_time = now;
 
-        if (is_critical && elapsed >= 3 && !silent) {
-            last_alert_time = now;
-            play_alarm_sound();
+        play_alarm_sound();
 
-            // Определяем что именно украдено
-            std::wstring stolen;
-            if (lower_path.find(L"cookies") != std::wstring::npos)
-                stolen = L"Cookies";
-            else if (lower_path.find(L"login data") != std::wstring::npos)
-                stolen = L"Passwords";
-            else if (lower_path.find(L"local state") != std::wstring::npos)
-                stolen = L"Master Key";
-            else if (lower_path.find(L"key_data") != std::wstring::npos || lower_path.find(L"tdata") != std::wstring::npos)
-                stolen = L"Telegram Session";
-            else if (lower_path.find(L"discord") != std::wstring::npos)
-                stolen = L"Discord Token";
-            else if (lower_path.find(L"ssfn") != std::wstring::npos || lower_path.find(L"loginusers") != std::wstring::npos)
-                stolen = L"Steam Session";
-            else if (lower_path.find(L"seed") != std::wstring::npos || lower_path.find(L"wallet") != std::wstring::npos)
-                stolen = L"Crypto Wallet";
-            else if (lower_path.find(L".git-credentials") != std::wstring::npos)
-                stolen = L"Git Credentials";
-            else if (lower_path.find(L"key4.db") != std::wstring::npos || lower_path.find(L"logins.json") != std::wstring::npos)
-                stolen = L"Firefox Passwords";
-            else
-                stolen = L"Session Data";
+        // Clean notification:
+        // Title: "COOKIES STOLEN — Chrome"
+        // Body:  "Cookies-journal was MODIFIED"
+        std::wstring stolen = detect_stolen_type(event.file_path);
+        std::wstring file = short_filename(event.file_path);
 
-            std::wstring notif_msg = event.file_path + L"\n" + stolen + L" | " + event.action;
+        std::wstring title = stolen + L" — " + event.browser_name;
+        std::wstring body = file + L" was " + event.action;
 
-            show_notification(L"WenzGuard: " + event.browser_name, notif_msg);
-        }
+        show_notification(title, body);
     });
 
-    // Периодическое сканирование процессов
+    // Periodic process scan in background
     std::thread scan_thread(periodic_scan_thread);
     scan_thread.detach();
 
-    std::wcout << L"  ─────────────────────────────────\n";
-    std::wcout << L"  Мониторинг запущен. Ctrl+C для выхода.\n";
-    std::wcout << L"  ─────────────────────────────────\n\n";
-
-    Logger::instance().info(L"Мониторинг: " + std::to_wstring(total) + L" профилей");
+    printf("  Monitoring active. Ctrl+C to stop.\n");
+    printf("  ====================================\n\n");
 
     monitor.start();
 
     g_monitor = nullptr;
-    Logger::instance().info(L"WenzGuard остановлен.");
     return 0;
 }

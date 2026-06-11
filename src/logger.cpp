@@ -3,7 +3,7 @@
 #include <chrono>
 #include <iomanip>
 #include <sstream>
-#include <iostream>
+#include <cstdio>
 
 Logger& Logger::instance() {
     static Logger logger;
@@ -14,9 +14,7 @@ void Logger::init(const std::wstring& log_path) {
     std::lock_guard<std::mutex> lock(mutex_);
     file_.open(log_path, std::ios::app | std::ios::out);
     if (file_.is_open()) {
-        file_ << L"\n========================================\n";
-        file_ << L"WenzGuard запущен: " << get_timestamp() << L"\n";
-        file_ << L"========================================\n";
+        file_ << L"=== WenzGuard started: " << get_timestamp() << L" ===\n";
         file_.flush();
     }
 }
@@ -37,10 +35,15 @@ void Logger::log(const std::wstring& level, const std::wstring& message) {
 
     std::wstring line = L"[" + get_timestamp() + L"] [" + level + L"] " + message;
 
-    // Консоль
-    std::wcout << line << std::endl;
+    // Console (via WriteConsoleW — handles all Unicode properly)
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (hConsole != INVALID_HANDLE_VALUE) {
+        DWORD written;
+        WriteConsoleW(hConsole, line.c_str(), (DWORD)line.size(), &written, NULL);
+        WriteConsoleW(hConsole, L"\n", 1, &written, NULL);
+    }
 
-    // Файл
+    // File
     if (file_.is_open()) {
         file_ << line << std::endl;
         file_.flush();
