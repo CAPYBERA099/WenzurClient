@@ -1,24 +1,29 @@
-# Dependencies
-node_modules/
-
 # Build
-dist/
-.vite/
-
-# Tauri
-src-tauri/target/
+build/
+out/
+cmake-build-*/
+x64/
+x86/
+Debug/
+Release/
 
 # IDE
+.vs/
 .vscode/
-.idea/
-*.swp
-*.swo
+*.suo
+*.user
+*.sln.docstates
+*.vcxproj.user
 
-# OS
-.DS_Store
-Thumbs.db
+# Compiled
+*.exe
+*.dll
+*.obj
+*.o
+*.pdb
+*.ilk
+*.exp
+*.lib
 
-# Env
-.env
-.env.local
-.env.*.local
+# Logs
+*.log

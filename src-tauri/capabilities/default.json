@@ -1,9 +1,0 @@
-{
-  "identifier": "default",
-  "description": "Default permissions for WenzLauncher",
-  "windows": ["main"],
-  "permissions": [
-    "core:default",
-    "shell:allow-open"
-  ]
-}

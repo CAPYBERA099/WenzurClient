@@ -1,103 +1,58 @@
-# 🎮 WenzLauncher
+# WenzGuard — Монитор безопасности сессий
 
-Кастомный Minecraft лаунчер в стиле Lunar Client — построен на **Tauri 2** (Rust) + **React** + **TypeScript** + **Tailwind CSS**.
+Программа следит за файлами сессий и cookies всех установленных браузеров на Windows. Если стилер или вредоносная программа пытается прочитать или скопировать ваши данные — WenzGuard немедленно предупредит вас.
 
-![WenzLauncher](https://img.shields.io/badge/Tauri-2.0-blue?style=flat-square) ![React](https://img.shields.io/badge/React-18-61dafb?style=flat-square) ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
+## Поддерживаемые браузеры
 
-## ✨ Возможности
+- Google Chrome
+- Microsoft Edge
+- Mozilla Firefox
+- Opera / Opera GX
+- Brave
+- Yandex Browser
+- Vivaldi
 
-- 🚀 **Быстрый запуск** — нативное приложение на Rust, минимальное потребление ресурсов
-- 📦 **Управление сборками** — создавай и переключай игровые конфигурации
-- 🧩 **Менеджер модов** — устанавливай моды в один клик
-- 👕 **Скины и косметика** — управляй внешним видом персонажа
-- ⚙️ **Гибкие настройки** — RAM, JVM аргументы, Java, разрешение
-- 🎨 **Современный UI** — тёмная тема в стиле Lunar Client
+## Что отслеживается
 
-## 🛠 Стек
+- **Cookies** — файлы куки и их журналы
+- **Login Data** — сохранённые пароли
+- **Local State** — мастер-ключ шифрования (критично!)
+- **Sessions** — файлы сессий (текущие вкладки, история сессий)
+- **Web Data** — формы автозаполнения
+- **key4.db / logins.json** — пароли Firefox
 
-| Слой | Технология |
-|------|------------|
-| Фреймворк | [Tauri 2](https://v2.tauri.app/) |
-| Backend | Rust |
-| Frontend | React 18 + TypeScript |
-| Стили | Tailwind CSS |
-| Сборка | Vite |
-| Иконки | Lucide React |
+## Как работает
 
-## 📦 Установка
+1. **Обнаружение браузеров** — автоматически находит все профили
+2. **Мониторинг файлов** — через Windows API `ReadDirectoryChangesW` следит за изменениями
+3. **Сканирование процессов** — каждые 30 секунд проверяет запущенные процессы на подозрительные (известные стилеры, запуск из Temp)
+4. **Оповещение** — звуковой сигнал + всплывающее окно при обнаружении угрозы
+5. **Логирование** — все события записываются в `wenzguard.log`
 
-### Зависимости
+## Сборка
 
-1. [Node.js](https://nodejs.org/) >= 18
-2. [Rust](https://www.rust-lang.org/tools/install) (через rustup)
-3. [Tauri Prerequisites](https://v2.tauri.app/start/prerequisites/)
+Требуется CMake 3.15+ и компилятор C++17 (Visual Studio 2019+).
 
-### Запуск в режиме разработки
-
-```bash
-# Установка зависимостей
-npm install
-
-# Запуск Tauri + Vite
-npm run tauri dev
+```cmd
+cmake -B build
+cmake --build build --config Release
 ```
 
-### Сборка
+Готовый exe будет в `build\Release\WenzGuard.exe`
 
-```bash
-# Создание установщика
-npm run tauri build
+## Запуск
+
+```cmd
+WenzGuard.exe              # Полный мониторинг с уведомлениями
+WenzGuard.exe --silent     # Без всплывающих окон (только консоль + лог)
+WenzGuard.exe --scan-only  # Однократное сканирование процессов
+WenzGuard.exe --help       # Справка
 ```
 
-Готовый установщик будет в `src-tauri/target/release/bundle/`.
+Для автозапуска: добавьте ярлык в `shell:startup` (Win+R → `shell:startup`).
 
-## 📁 Структура проекта
+## Уровни угроз
 
-```
-WenzLauncher/
-├── src/                    # React frontend
-│   ├── components/         # UI компоненты
-│   │   ├── Sidebar.tsx     # Боковая навигация
-│   │   └── TitleBar.tsx    # Кастомный заголовок окна
-│   ├── pages/              # Страницы
-│   │   ├── HomePage.tsx    # Главная + запуск
-│   │   ├── InstancesPage.tsx # Управление сборками
-│   │   ├── ModsPage.tsx    # Менеджер модов
-│   │   ├── SkinsPage.tsx   # Скины и косметика
-│   │   └── SettingsPage.tsx # Настройки
-│   ├── lib/                # Утилиты
-│   ├── styles/             # CSS
-│   ├── App.tsx             # Роутинг
-│   └── main.tsx            # Точка входа
-├── src-tauri/              # Rust backend
-│   ├── src/
-│   │   ├── main.rs         # Точка входа Tauri
-│   │   ├── lib.rs          # Команды Tauri
-│   │   └── launcher.rs     # Логика лаунчера
-│   ├── Cargo.toml
-│   └── tauri.conf.json     # Конфиг Tauri
-├── package.json
-├── tailwind.config.js
-├── vite.config.ts
-└── README.md
-```
-
-## 🗺 Роадмап
-
-- [x] UI лаунчера (главная, сборки, моды, скины, настройки)
-- [x] Tauri backend с командами
-- [ ] Авторизация через Microsoft (OAuth2)
-- [ ] Скачивание версий через Mojang API
-- [ ] Запуск Minecraft с правильным classpath
-- [ ] Скачивание и установка модов (Modrinth API)
-- [ ] Скачивание Java автоматически
-- [ ] Система обновлений лаунчера
-- [ ] Мультиплеер — список серверов
-
-## 📄 Лицензия
-
-MIT — делай что хочешь.
-
----
-
-*Сделано с 💚 для WenzPlay*
+- 🔴 **КРИТИЧНО** — обращение к Cookies, Login Data, Local State, key4.db
+- 🟡 **СЕССИЯ** — обращение к файлам сессий и вкладок
+- 🔵 **ИНФО** — прочие изменения в профиле браузера
