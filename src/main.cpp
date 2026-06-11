@@ -37,16 +37,15 @@ BOOL WINAPI console_handler(DWORD signal) {
 }
 
 void print_banner() {
-    SetConsoleOutputCP(CP_UTF8);
-    SetConsoleCP(CP_UTF8);
+    // Устанавливаем кодировку консоли для русского текста
+    SetConsoleOutputCP(1251);
+    SetConsoleCP(1251);
 
     std::wcout << L"\n";
-    std::wcout << L"  ╦ ╦╔═╗╔╗╔╔═╗  ╔═╗╦ ╦╔═╗╦═╗╔╦╗\n";
-    std::wcout << L"  ║║║║╣ ║║║╔═╝  ║ ╦║ ║╠═╣╠╦╝ ║║\n";
-    std::wcout << L"  ╚╩╝╚═╝╝╚╝╚═╝  ╚═╝╚═╝╩ ╩╩╚══╩╝\n";
+    std::wcout << L"  =============================\n";
+    std::wcout << L"   W E N Z   G U A R D  v2.0\n";
+    std::wcout << L"  =============================\n";
     std::wcout << L"\n";
-    std::wcout << L"  Монитор безопасности сессий v2.0\n";
-    std::wcout << L"  ─────────────────────────────────\n\n";
 }
 
 void run_process_scan() {
@@ -66,12 +65,9 @@ void run_process_scan() {
             std::transform(lower.begin(), lower.end(), lower.begin(), ::towlower);
             if (KNOWN_STEALERS.count(lower) > 0) {
                 play_alarm_sound();
-                show_alert(
-                    L"⚠ WenzGuard — ОБНАРУЖЕН СТИЛЕР!",
-                    L"Обнаружен: " + proc.name +
-                    L"\nPID: " + std::to_wstring(proc.pid) +
-                    L"\nПуть: " + proc.path +
-                    L"\n\nНЕМЕДЛЕННО завершите этот процесс!"
+                show_notification(
+                    L"STEALER DETECTED!",
+                    proc.name + L" (PID " + std::to_wstring(proc.pid) + L")\n" + proc.path
                 );
             }
         }
@@ -86,13 +82,13 @@ void periodic_scan_thread() {
     }
 }
 
-// Категория -> эмодзи для вывода
+// Категория -> иконка для вывода
 std::wstring category_icon(const std::wstring& cat) {
-    if (cat == L"messenger") return L"💬";
-    if (cat == L"gaming")    return L"🎮";
-    if (cat == L"crypto")    return L"💰";
-    if (cat == L"vpn")       return L"🔒";
-    return L"📁";
+    if (cat == L"messenger") return L"[MSG]";
+    if (cat == L"gaming")    return L"[GAME]";
+    if (cat == L"crypto")    return L"[CRYPTO]";
+    if (cat == L"vpn")       return L"[VPN]";
+    return L"[APP]";
 }
 
 int wmain(int argc, wchar_t* argv[]) {
@@ -229,36 +225,47 @@ int wmain(int argc, wchar_t* argv[]) {
                                event.action + L": " + event.file_path;
 
         if (is_critical) {
-            Logger::instance().alert(L"🔴 КРИТИЧНО " + log_msg);
+            Logger::instance().alert(L"[!!!] " + log_msg);
         } else if (is_session) {
-            Logger::instance().warn(L"🟡 СЕССИЯ " + log_msg);
+            Logger::instance().warn(L"[!!] " + log_msg);
         } else {
-            Logger::instance().info(L"🔵 " + log_msg);
+            Logger::instance().info(L"[i] " + log_msg);
         }
 
-        // Алерт (не чаще раз в 5 сек)
+        // Уведомление (не чаще раз в 3 сек)
         auto now = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - last_alert_time).count();
 
-        if (is_critical && elapsed >= 5 && !silent) {
+        if (is_critical && elapsed >= 3 && !silent) {
             last_alert_time = now;
             play_alarm_sound();
 
-            std::wstring alert_msg =
-                L"Подозрительное обращение к данным!\n\n"
-                L"Приложение: " + event.browser_name + L"\n"
-                L"Файл: " + event.file_path + L"\n"
-                L"Действие: " + event.action + L"\n"
-                L"Время: " + event.timestamp + L"\n\n"
-                L"Если вы не открывали это приложение — возможно,\n"
-                L"стилер пытается украсть ваши данные!\n\n"
-                L"1. Откройте Диспетчер задач (Ctrl+Shift+Esc)\n"
-                L"2. Ищите подозрительные процессы\n"
-                L"3. Проверьте ПК антивирусом";
+            // Определяем что именно украдено
+            std::wstring stolen;
+            if (lower_path.find(L"cookies") != std::wstring::npos)
+                stolen = L"Cookies";
+            else if (lower_path.find(L"login data") != std::wstring::npos)
+                stolen = L"Passwords";
+            else if (lower_path.find(L"local state") != std::wstring::npos)
+                stolen = L"Master Key";
+            else if (lower_path.find(L"key_data") != std::wstring::npos || lower_path.find(L"tdata") != std::wstring::npos)
+                stolen = L"Telegram Session";
+            else if (lower_path.find(L"discord") != std::wstring::npos)
+                stolen = L"Discord Token";
+            else if (lower_path.find(L"ssfn") != std::wstring::npos || lower_path.find(L"loginusers") != std::wstring::npos)
+                stolen = L"Steam Session";
+            else if (lower_path.find(L"seed") != std::wstring::npos || lower_path.find(L"wallet") != std::wstring::npos)
+                stolen = L"Crypto Wallet";
+            else if (lower_path.find(L".git-credentials") != std::wstring::npos)
+                stolen = L"Git Credentials";
+            else if (lower_path.find(L"key4.db") != std::wstring::npos || lower_path.find(L"logins.json") != std::wstring::npos)
+                stolen = L"Firefox Passwords";
+            else
+                stolen = L"Session Data";
 
-            std::thread([alert_msg]() {
-                show_alert(L"⚠ WenzGuard — ТРЕВОГА!", alert_msg);
-            }).detach();
+            std::wstring notif_msg = event.file_path + L"\n" + stolen + L" | " + event.action;
+
+            show_notification(L"WenzGuard: " + event.browser_name, notif_msg);
         }
     });
 
