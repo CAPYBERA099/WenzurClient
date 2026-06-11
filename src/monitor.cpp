@@ -9,28 +9,20 @@
 
 namespace fs = std::filesystem;
 
-// Файлы которые вызывают тревогу при изменении
+// Critical files — only truly sensitive, NOT generic patterns like .ldb
 static const std::vector<std::wstring> CRITICAL_FILES = {
-    // Browsers
+    // Browser credentials (exact names, not patterns)
     L"cookies", L"login data", L"web data", L"local state",
-    L"cookies-journal", L"login data-journal",
     L"cookies.sqlite", L"logins.json", L"key4.db", L"key3.db",
-    L"extension cookies", L"sessionstore.jsonlz4",
     // Telegram
     L"key_datas", L"key_data",
-    // Discord (only .ldb in discord paths — checked via browser_name)
-    L".ldb",
     // Steam
     L"ssfn", L"loginusers.vdf",
-    // Minecraft
-    L"launcher_accounts.json",
     // Crypto
     L"seed.seco", L"seed.json", L"default_wallet",
-    // FTP/SSH
-    L"recentservers.xml", L"sitemanager.xml",
     // Git
     L".git-credentials",
-    // Honeypot canaries (always match)
+    // Honeypot canaries
     L".wgcanary", L"canary",
 };
 

@@ -169,20 +169,46 @@ std::wstring detect_stolen_type(const std::wstring& path) {
     std::wstring p = path;
     std::transform(p.begin(), p.end(), p.begin(), ::towlower);
 
+    // Browser credentials
     if (p.find(L"local state") != std::wstring::npos)         return L"MASTER KEY";
     if (p.find(L"login data") != std::wstring::npos)           return L"PASSWORDS";
-    if (p.find(L"cookies") != std::wstring::npos)              return L"COOKIES";
     if (p.find(L"web data") != std::wstring::npos)             return L"AUTOFILL/CARDS";
-    if (p.find(L"key_data") != std::wstring::npos)             return L"TELEGRAM SESSION";
-    if (p.find(L"d877f783d5d3ef8c") != std::wstring::npos)     return L"TELEGRAM SESSION";
-    if (p.find(L".ldb") != std::wstring::npos)                 return L"DISCORD TOKEN";
-    if (p.find(L"ssfn") != std::wstring::npos)                 return L"STEAM GUARD";
-    if (p.find(L"loginusers.vdf") != std::wstring::npos)       return L"STEAM ACCOUNT";
-    if (p.find(L"seed") != std::wstring::npos)                 return L"CRYPTO SEED";
-    if (p.find(L"wallet") != std::wstring::npos)               return L"CRYPTO WALLET";
-    if (p.find(L".git-credentials") != std::wstring::npos)     return L"GIT CREDENTIALS";
     if (p.find(L"key4.db") != std::wstring::npos)              return L"FIREFOX KEYS";
     if (p.find(L"logins.json") != std::wstring::npos)          return L"FIREFOX PASSWORDS";
+
+    // Cookies — check path context
+    if (p.find(L"cookies") != std::wstring::npos) {
+        if (p.find(L"\\chrome\\") != std::wstring::npos)       return L"CHROME COOKIES";
+        if (p.find(L"\\edge\\") != std::wstring::npos)         return L"EDGE COOKIES";
+        if (p.find(L"\\opera") != std::wstring::npos)          return L"OPERA COOKIES";
+        if (p.find(L"\\brave") != std::wstring::npos)          return L"BRAVE COOKIES";
+        if (p.find(L"\\yandex") != std::wstring::npos)         return L"YANDEX COOKIES";
+        if (p.find(L"\\firefox\\") != std::wstring::npos)      return L"FIREFOX COOKIES";
+        return L"COOKIES";
+    }
+
+    // Telegram
+    if (p.find(L"key_data") != std::wstring::npos)             return L"TELEGRAM SESSION";
+    if (p.find(L"d877f783d5d3ef8c") != std::wstring::npos)     return L"TELEGRAM SESSION";
+
+    // Discord — only if path actually has "discord" in it
+    if (p.find(L"\\discord") != std::wstring::npos)            return L"DISCORD TOKEN";
+
+    // Steam
+    if (p.find(L"ssfn") != std::wstring::npos)                 return L"STEAM GUARD";
+    if (p.find(L"loginusers.vdf") != std::wstring::npos)       return L"STEAM ACCOUNT";
+
+    // Crypto
+    if (p.find(L"seed") != std::wstring::npos)                 return L"CRYPTO SEED";
+    if (p.find(L"wallet") != std::wstring::npos)               return L"CRYPTO WALLET";
+
+    // Git
+    if (p.find(L".git-credentials") != std::wstring::npos)     return L"GIT CREDENTIALS";
+
+    // Honeypot
+    if (p.find(L"canary") != std::wstring::npos ||
+        p.find(L".wgcanary") != std::wstring::npos)            return L"HONEYPOT";
+
     return L"SESSION DATA";
 }
 
@@ -353,11 +379,11 @@ int wmain(int argc, wchar_t* argv[]) {
 
         if (silent) return;
 
-        // Throttle file alerts (3 sec)
+        // Throttle file alerts (10 sec per source to avoid spam)
         auto now = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
             now - last_file_alert).count();
-        if (elapsed < 3) return;
+        if (elapsed < 10) return;
         last_file_alert = now;
 
         play_alarm_sound();
