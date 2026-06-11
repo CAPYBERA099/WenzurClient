@@ -1,11 +1,12 @@
 /*
- *  WenzGuard v3.0 — Session Security Monitor
+ *  WenzGuard v3.2 — Session Security Monitor
  *
  *  Detection methods:
- *  1. Process scanner — catches known stealers by name
- *  2. Suspicious process detector — flags .exe from Temp/Downloads
- *  3. Honeypot canary files — fake session files that stealers grab
- *  4. File monitor — catches file creation/deletion/renaming (not reads)
+ *  1. Real-time process tracker — detects NEW suspicious processes every 2 sec
+ *  2. Known stealer database — 50+ stealer names
+ *  3. Location detector — flags .exe from Temp/Downloads/Desktop
+ *  4. Honeypot canary files — fake session files stealers try to grab
+ *  5. File monitor — catches file creation/deletion in session dirs
  *
  *  Build:  cmake -B build && cmake --build build --config Release
  *  Run:    WenzGuard.exe [--silent] [--scan-only] [--test]
@@ -18,6 +19,7 @@
 #include <atomic>
 #include <algorithm>
 #include <map>
+#include <set>
 #include <chrono>
 
 #include "browser_paths.h"
@@ -45,63 +47,116 @@ void print_banner() {
 
     printf("\n");
     printf("  ======================================\n");
-    printf("   W E N Z   G U A R D  v3.0\n");
+    printf("   W E N Z   G U A R D  v3.2\n");
     printf("   Session Security Monitor\n");
     printf("  ======================================\n\n");
 }
 
-void run_process_scan(bool verbose = false) {
-    auto suspicious = scan_suspicious_processes();
+// ============ REAL-TIME PROCESS TRACKER ============
+// Scans every 2 seconds, tracks PIDs, alerts on NEW suspicious processes
 
-    if (suspicious.empty()) {
-        if (verbose) printf("  [OK] No suspicious processes found\n");
-        return;
-    }
+void realtime_process_tracker() {
+    std::set<DWORD> known_pids;
+    bool first_scan = true;
 
-    for (const auto& proc : suspicious) {
-        printf("  [!] %ls (PID %lu) - %ls\n",
-               proc.name.c_str(), proc.pid, proc.reason.c_str());
-        if (!proc.path.empty())
-            printf("      Path: %ls\n", proc.path.c_str());
-
-        std::wstring lower = proc.name;
-        std::transform(lower.begin(), lower.end(), lower.begin(), ::towlower);
-
-        if (KNOWN_STEALERS.count(lower) > 0) {
-            play_alarm_sound();
-            show_notification(
-                L"STEALER: " + proc.name,
-                L"PID " + std::to_wstring(proc.pid) + L"\n" + proc.path
-            );
-        } else {
-            show_notification(
-                L"Suspicious: " + proc.name,
-                proc.reason + L"\n" + proc.path
-            );
-        }
-    }
-}
-
-void periodic_scan_thread() {
     while (g_running.load()) {
-        for (int i = 0; i < 30 && g_running.load(); i++) Sleep(1000);
-        if (!g_running.load()) break;
-        run_process_scan();
+        auto all = get_all_processes();
+
+        for (const auto& proc : all) {
+            // Skip already-seen PIDs
+            if (known_pids.count(proc.pid) > 0) continue;
+            known_pids.insert(proc.pid);
+
+            // On first scan, just record existing PIDs without alerting
+            if (first_scan) continue;
+
+            std::wstring lower_name = proc.name;
+            std::transform(lower_name.begin(), lower_name.end(), lower_name.begin(), ::towlower);
+
+            // Skip known safe processes
+            if (is_browser_process(proc.name)) continue;
+            if (SYSTEM_PROCESSES.count(lower_name) > 0) continue;
+
+            // CHECK 1: Known stealer
+            if (KNOWN_STEALERS.count(lower_name) > 0) {
+                play_alarm_sound();
+                play_alarm_sound();
+                play_alarm_sound();
+
+                std::wstring title = L"!! STEALER: " + proc.name + L" !!";
+                std::wstring body = L"PID: " + std::to_wstring(proc.pid);
+                if (!proc.path.empty()) body += L"\n" + proc.path;
+
+                show_notification(title, body);
+                Logger::instance().alert(title + L" | " + body);
+                continue;
+            }
+
+            // CHECK 2: Suspicious process name
+            if (is_suspicious_process(proc.name)) {
+                play_alarm_sound();
+
+                std::wstring title = L"Suspicious: " + proc.name;
+                std::wstring body = L"PID: " + std::to_wstring(proc.pid);
+                if (!proc.path.empty()) body += L"\n" + proc.path;
+
+                show_notification(title, body);
+                Logger::instance().warn(title + L" | " + body);
+                continue;
+            }
+
+            // CHECK 3: Running from suspicious location
+            if (!proc.path.empty() && is_suspicious_location(proc.path)
+                && !is_safe_location(proc.path)) {
+                play_alarm_sound();
+
+                std::wstring title = L"New process: " + proc.name;
+                std::wstring body = proc.path;
+
+                show_notification(title, body);
+                Logger::instance().warn(L"FROM TEMP/DOWNLOADS: " + proc.name + L" | " + proc.path);
+            }
+        }
+
+        first_scan = false;
+
+        // Clean up stale PIDs periodically (every ~30 seconds = 15 iterations)
+        static int cleanup_counter = 0;
+        if (++cleanup_counter >= 15) {
+            cleanup_counter = 0;
+            std::set<DWORD> current_pids;
+            for (const auto& p : all) current_pids.insert(p.pid);
+
+            std::set<DWORD> to_remove;
+            for (DWORD pid : known_pids) {
+                if (current_pids.count(pid) == 0) to_remove.insert(pid);
+            }
+            for (DWORD pid : to_remove) known_pids.erase(pid);
+        }
+
+        // Sleep 2 seconds (in small chunks for responsiveness)
+        for (int i = 0; i < 20 && g_running.load(); i++) Sleep(100);
     }
 }
 
-// Extract just the filename from full path
+// ============ FILE EVENT HELPERS ============
+
 std::wstring short_filename(const std::wstring& full_path) {
     auto pos = full_path.find_last_of(L"\\");
     if (pos != std::wstring::npos) return full_path.substr(pos + 1);
     return full_path;
 }
 
-// Check if a file change is from a honeypot canary
 bool is_honeypot_file(const std::wstring& path, const std::vector<HoneypotFile>& honeypots,
                       std::wstring& app_out, std::wstring& dtype_out) {
+    std::wstring lower = path;
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::towlower);
+
     for (const auto& hp : honeypots) {
-        if (path.find(short_filename(hp.path)) != std::wstring::npos) {
+        std::wstring hp_name = short_filename(hp.path);
+        std::transform(hp_name.begin(), hp_name.end(), hp_name.begin(), ::towlower);
+
+        if (lower.find(hp_name) != std::wstring::npos) {
             app_out = hp.app_name;
             dtype_out = hp.data_type;
             return true;
@@ -110,7 +165,6 @@ bool is_honeypot_file(const std::wstring& path, const std::vector<HoneypotFile>&
     return false;
 }
 
-// Detect what type of data was stolen
 std::wstring detect_stolen_type(const std::wstring& path) {
     std::wstring p = path;
     std::transform(p.begin(), p.end(), p.begin(), ::towlower);
@@ -121,8 +175,7 @@ std::wstring detect_stolen_type(const std::wstring& path) {
     if (p.find(L"web data") != std::wstring::npos)             return L"AUTOFILL/CARDS";
     if (p.find(L"key_data") != std::wstring::npos)             return L"TELEGRAM SESSION";
     if (p.find(L"d877f783d5d3ef8c") != std::wstring::npos)     return L"TELEGRAM SESSION";
-    if (p.find(L".ldb") != std::wstring::npos &&
-        p.find(L"discord") != std::wstring::npos)              return L"DISCORD TOKEN";
+    if (p.find(L".ldb") != std::wstring::npos)                 return L"DISCORD TOKEN";
     if (p.find(L"ssfn") != std::wstring::npos)                 return L"STEAM GUARD";
     if (p.find(L"loginusers.vdf") != std::wstring::npos)       return L"STEAM ACCOUNT";
     if (p.find(L"seed") != std::wstring::npos)                 return L"CRYPTO SEED";
@@ -133,7 +186,8 @@ std::wstring detect_stolen_type(const std::wstring& path) {
     return L"SESSION DATA";
 }
 
-// Test mode: simulate a stealer touching honeypot files
+// ============ TEST MODE ============
+
 void run_test(const std::vector<HoneypotFile>& honeypots) {
     printf("\n  === TEST MODE ===\n\n");
 
@@ -143,14 +197,13 @@ void run_test(const std::vector<HoneypotFile>& honeypots) {
     }
 
     printf("  Simulating stealer in 3 seconds...\n");
-    printf("  You should see notifications for each honeypot.\n\n");
+    printf("  You should see notifications for each canary.\n\n");
     Sleep(3000);
 
     for (const auto& hp : honeypots) {
         printf("  [TEST] Touching: %ls (%ls)\n",
                hp.app_name.c_str(), hp.data_type.c_str());
 
-        // Touch the file (update timestamp = triggers FILE_NOTIFY_CHANGE_LAST_WRITE)
         HANDLE hFile = CreateFileW(
             hp.path.c_str(), FILE_WRITE_ATTRIBUTES,
             FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
@@ -161,14 +214,18 @@ void run_test(const std::vector<HoneypotFile>& honeypots) {
             GetSystemTimeAsFileTime(&ft);
             SetFileTime(hFile, NULL, NULL, &ft);
             CloseHandle(hFile);
+        } else {
+            printf("    (could not touch: %lu)\n", GetLastError());
         }
 
-        Sleep(500);
+        Sleep(1000);
     }
 
     printf("\n  [TEST] Done! Check your notifications.\n");
     printf("  Press Ctrl+C to stop.\n\n");
 }
+
+// ============ MAIN ============
 
 int wmain(int argc, wchar_t* argv[]) {
     bool silent = false;
@@ -181,10 +238,10 @@ int wmain(int argc, wchar_t* argv[]) {
         if (arg == L"--scan-only" || arg == L"--scan") scan_only = true;
         if (arg == L"--test" || arg == L"-t") test_mode = true;
         if (arg == L"--help" || arg == L"-h") {
-            printf("WenzGuard v3.0 - Session Security Monitor\n\n");
+            printf("WenzGuard v3.2 - Session Security Monitor\n\n");
             printf("  --silent, -s     No notifications (log only)\n");
             printf("  --scan-only      Scan processes and exit\n");
-            printf("  --test, -t       Test mode: touch honeypots to verify alerts\n");
+            printf("  --test, -t       Test: touch honeypots to verify alerts\n");
             printf("  --help, -h       This help\n");
             return 0;
         }
@@ -200,12 +257,11 @@ int wmain(int argc, wchar_t* argv[]) {
     log_path = log_path.substr(0, log_path.find_last_of(L'\\') + 1) + L"wenzguard.log";
     Logger::instance().init(log_path);
 
-    // === DISCOVER ===
+    // === DISCOVER PROFILES ===
     auto browsers = discover_browser_profiles();
     auto apps = discover_app_profiles();
-    int total = (int)browsers.size() + (int)apps.size();
 
-    printf("  Found: %d browsers, %d apps\n\n", (int)browsers.size(), (int)apps.size());
+    printf("  Browsers: %d | Apps: %d\n", (int)browsers.size(), (int)apps.size());
 
     for (const auto& b : browsers)
         printf("    [WEB]  %ls\n", b.browser_name.c_str());
@@ -224,21 +280,31 @@ int wmain(int argc, wchar_t* argv[]) {
             printf("    [%s] %ls\n", label, a->app_name.c_str());
     }
 
-    // === HONEYPOTS ===
+    // === DEPLOY HONEYPOTS ===
     printf("\n");
     auto honeypots = deploy_honeypots();
 
-    // === PROCESS SCAN ===
-    printf("\n  Scanning processes...\n");
-    run_process_scan(true);
+    // === INITIAL PROCESS SCAN ===
+    printf("\n  Initial process scan...\n");
+    auto suspicious = scan_suspicious_processes();
+    if (suspicious.empty()) {
+        printf("  [OK] No suspicious processes\n");
+    } else {
+        for (const auto& s : suspicious) {
+            printf("  [!] %ls (PID %lu) - %ls\n",
+                   s.name.c_str(), s.pid, s.reason.c_str());
+            if (!s.path.empty())
+                printf("      %ls\n", s.path.c_str());
+        }
+    }
 
     if (scan_only) {
         cleanup_honeypots(honeypots);
-        printf("\n  Scan complete.\n");
+        printf("\n  Done.\n");
         return 0;
     }
 
-    // === MONITORING ===
+    // === FILE MONITOR ===
     SessionMonitor monitor;
     g_monitor = &monitor;
 
@@ -247,76 +313,67 @@ int wmain(int argc, wchar_t* argv[]) {
     for (const auto& a : apps)
         monitor.add_watch(a.profile_path, a.app_name);
 
-    // Throttle
-    static auto last_alert_time = std::chrono::steady_clock::now();
+    // Throttle for file events
+    static auto last_file_alert = std::chrono::steady_clock::now();
 
     monitor.set_alert_callback([&](const FileEvent& event) {
         std::wstring file = short_filename(event.file_path);
 
-        // === HONEYPOT CHECK (highest priority) ===
+        // === HONEYPOT ===
         std::wstring hp_app, hp_dtype;
         if (is_honeypot_file(event.file_path, honeypots, hp_app, hp_dtype)) {
-            // ANY access to honeypot = stealer!
             play_alarm_sound();
             play_alarm_sound();
 
-            printf("\n  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-            printf("  !! HONEYPOT TRIGGERED !!          !!\n");
-            printf("  !! %ls - %ls\n",
-                   hp_app.c_str(), hp_dtype.c_str());
-            printf("  !! File: %ls\n", file.c_str());
-            printf("  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n");
+            std::wstring title = L"!! " + hp_dtype + L" STOLEN !!";
+            std::wstring body = hp_app + L" canary triggered\n" + event.file_path;
 
-            Logger::instance().alert(
-                L"HONEYPOT TRIGGERED: " + hp_app + L" " + hp_dtype +
-                L" | " + event.file_path);
+            show_notification(title, body);
+            Logger::instance().alert(L"HONEYPOT: " + hp_app + L" " + hp_dtype + L" | " + event.file_path);
 
-            if (!silent) {
+            // Find the culprit
+            auto culprits = scan_suspicious_processes();
+            for (const auto& c : culprits) {
                 show_notification(
-                    L"STEALER DETECTED! " + hp_dtype,
-                    hp_app + L" canary was touched!\n" + file
+                    L"STEALER PROCESS: " + c.name,
+                    L"PID " + std::to_wstring(c.pid) + L"\n" + c.path
                 );
             }
-
-            // Immediately scan processes to find the culprit
-            printf("  Scanning for culprit...\n");
-            run_process_scan(true);
             return;
         }
 
-        // === NORMAL FILE MONITORING ===
-        // Ignore MODIFIED — that's usually the legitimate app itself
+        // === SKIP MODIFIED ===
         if (event.action == L"MODIFIED") return;
 
-        // Only alert on CREATED / DELETED / RENAMED (suspicious)
+        // Log all non-modified events
         std::wstring stolen = detect_stolen_type(event.file_path);
-
         Logger::instance().info(
             L"[" + event.browser_name + L"] " + stolen + L" " +
-            event.action + L": " + file);
+            event.action + L": " + event.file_path);
 
         if (silent) return;
 
-        // Throttle
+        // Throttle file alerts (3 sec)
         auto now = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
-            now - last_alert_time).count();
+            now - last_file_alert).count();
         if (elapsed < 3) return;
-        last_alert_time = now;
+        last_file_alert = now;
 
         play_alarm_sound();
         show_notification(
-            stolen + L" — " + event.browser_name,
-            file + L" was " + event.action
+            stolen + L" - " + event.browser_name,
+            event.action + L": " + event.file_path
         );
     });
 
-    // Periodic process scanning
-    std::thread scan_thread(periodic_scan_thread);
-    scan_thread.detach();
+    // === START REAL-TIME PROCESS TRACKER ===
+    printf("\n  Starting real-time process tracker (every 2s)...\n");
+    std::thread tracker_thread(realtime_process_tracker);
+    tracker_thread.detach();
 
     printf("\n  ======================================\n");
-    printf("  Monitoring active. Ctrl+C to stop.\n");
+    printf("  ACTIVE. Ctrl+C to stop.\n");
     printf("  ======================================\n\n");
 
     // Test mode
@@ -327,6 +384,7 @@ int wmain(int argc, wchar_t* argv[]) {
         test_thread.detach();
     }
 
+    // Start file monitoring (blocks)
     monitor.start();
 
     // Cleanup
