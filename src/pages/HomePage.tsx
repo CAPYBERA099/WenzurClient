@@ -1,140 +1,296 @@
-import { Play, Download, Cpu, HardDrive, Wifi, Gamepad2, Zap, Star } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { Play, Download, ChevronDown, Check, Loader2 } from "lucide-react";
+import type { Account } from "../App";
+import SkinViewer from "../components/SkinViewer";
 
-const recentVersions = [
-  { version: "1.21.4", type: "Release", date: "2024-12-03", active: true },
-  { version: "1.20.4", type: "Release", date: "2024-01-25", active: false },
-  { version: "1.8.9", type: "Release", date: "2015-12-09", active: false },
-];
+interface GameVersion {
+  id: string;
+  version_type: string;
+  url: string;
+  release_time: string;
+}
 
-const quickStats = [
-  { icon: Cpu, label: "Java", value: "21.0.2", color: "text-wenz-accent" },
-  { icon: HardDrive, label: "Диск", value: "2.4 GB", color: "text-wenz-purple" },
-  { icon: Wifi, label: "Пинг", value: "24 ms", color: "text-wenz-success" },
-  { icon: Gamepad2, label: "Сессии", value: "142", color: "text-wenz-warning" },
-];
+interface DownloadProgress {
+  stage: string;
+  progress: number;
+  detail: string;
+}
 
-const features = [
-  { icon: Zap, title: "Оптимизация FPS", desc: "Встроенные моды для максимальной производительности" },
-  { icon: Star, title: "Космётики", desc: "Уникальные крылья, шапки и анимации" },
-  { icon: Gamepad2, title: "Анти-чит", desc: "Собственная система античита для честной игры" },
-];
+interface Props {
+  account: Account;
+}
 
-export function HomePage() {
+export default function HomePage({ account }: Props) {
+  const [versions, setVersions] = useState<GameVersion[]>([]);
+  const [installedVersions, setInstalledVersions] = useState<string[]>([]);
+  const [selectedVersion, setSelectedVersion] = useState<GameVersion | null>(null);
+  const [showVersions, setShowVersions] = useState(false);
+  const [showSnapshots, setShowSnapshots] = useState(false);
+  const [loadingVersions, setLoadingVersions] = useState(true);
+  const [installing, setInstalling] = useState(false);
+  const [launching, setLaunching] = useState(false);
+  const [progress, setProgress] = useState<DownloadProgress | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    loadVersions();
+    loadInstalled();
+
+    const unlisten = listen<DownloadProgress>("download-progress", (event) => {
+      setProgress(event.payload);
+    });
+
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowVersions(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const loadVersions = async () => {
+    try {
+      const v = await invoke<GameVersion[]>("fetch_versions");
+      setVersions(v);
+      // По умолчанию выбираем первый релиз
+      const firstRelease = v.find((ver) => ver.version_type === "release");
+      if (firstRelease) setSelectedVersion(firstRelease);
+    } catch (err) {
+      console.error("Ошибка загрузки версий:", err);
+    } finally {
+      setLoadingVersions(false);
+    }
+  };
+
+  const loadInstalled = async () => {
+    try {
+      const installed = await invoke<string[]>("get_installed_versions");
+      setInstalledVersions(installed);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const isInstalled = selectedVersion ? installedVersions.includes(selectedVersion.id) : false;
+
+  const handleInstall = async () => {
+    if (!selectedVersion) return;
+    setInstalling(true);
+    setProgress({ stage: "Начало", progress: 0, detail: "" });
+    try {
+      await invoke("install_version", {
+        versionId: selectedVersion.id,
+        versionUrl: selectedVersion.url,
+      });
+      await loadInstalled();
+    } catch (err) {
+      console.error("Ошибка установки:", err);
+      setProgress({ stage: "Ошибка", progress: 0, detail: String(err) });
+    } finally {
+      setInstalling(false);
+      setTimeout(() => setProgress(null), 3000);
+    }
+  };
+
+  const handleLaunch = async () => {
+    if (!selectedVersion || !account) return;
+    
+    if (!isInstalled) {
+      await handleInstall();
+      return;
+    }
+
+    setLaunching(true);
+    try {
+      const config = await invoke<any>("get_config");
+      await invoke("launch_game", {
+        versionId: selectedVersion.id,
+        username: account.username,
+        uuid: account.uuid,
+        accessToken: account.access_token,
+        ramMb: config.ram_mb || 4096,
+        javaPath: config.java_path || "java",
+      });
+    } catch (err) {
+      console.error("Ошибка запуска:", err);
+      alert(String(err));
+    } finally {
+      setLaunching(false);
+    }
+  };
+
+  const filteredVersions = versions.filter(
+    (v) => showSnapshots || v.version_type === "release"
+  );
+
   return (
-    <div className="animate-fade-in space-y-6">
-      {/* Hero / Play Section */}
-      <div className="relative overflow-hidden rounded-xl border border-wenz-border bg-gradient-to-br from-wenz-card via-wenz-card to-wenz-accent/5 p-8">
-        <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-wenz-accent/5 blur-3xl" />
-        <div className="absolute -bottom-10 -left-10 h-40 w-40 rounded-full bg-wenz-purple/5 blur-3xl" />
-
-        <div className="relative flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="rounded bg-wenz-accent/20 px-2 py-0.5 text-xs font-semibold text-wenz-accent">
-                ГОТОВО К ЗАПУСКУ
-              </span>
-            </div>
-            <h1 className="mt-3 text-4xl font-extrabold tracking-tight text-wenz-text">
-              Minecraft <span className="text-wenz-accent">1.21.4</span>
-            </h1>
-            <p className="mt-2 max-w-md text-sm text-wenz-muted">
-              Последняя версия с оптимизацией WenzLauncher. Включены моды для
-              FPS, улучшенные шейдеры и античит.
-            </p>
-          </div>
-
-          <button className="animate-pulse-glow group flex h-20 w-20 items-center justify-center rounded-2xl bg-wenz-accent transition-all hover:scale-105 hover:bg-wenz-accent-hover">
-            <Play className="h-8 w-8 text-wenz-bg transition-transform group-hover:scale-110" fill="currentColor" />
-          </button>
-        </div>
-
-        {/* Quick Stats */}
-        <div className="relative mt-8 grid grid-cols-4 gap-4">
-          {quickStats.map((stat) => (
-            <div
-              key={stat.label}
-              className="flex items-center gap-3 rounded-lg border border-wenz-border bg-wenz-bg/50 px-4 py-3"
-            >
-              <stat.icon className={`h-4 w-4 ${stat.color}`} />
-              <div>
-                <p className="text-xs text-wenz-muted">{stat.label}</p>
-                <p className="font-mono text-sm font-semibold text-wenz-text">
-                  {stat.value}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
+    <div className="h-full flex flex-col items-center justify-center relative p-8">
+      {/* Background glow */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-wenz-accent/5 rounded-full blur-[120px]" />
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
-        {/* Recent Versions */}
-        <div className="col-span-2 rounded-xl border border-wenz-border bg-wenz-card p-5">
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-wenz-muted">
-            Установленные версии
-          </h2>
-          <div className="space-y-2">
-            {recentVersions.map((ver) => (
-              <div
-                key={ver.version}
-                className="flex items-center justify-between rounded-lg border border-wenz-border bg-wenz-bg/30 px-4 py-3 transition-colors hover:border-wenz-accent/30"
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`h-2 w-2 rounded-full ${
-                      ver.active ? "bg-wenz-success" : "bg-wenz-muted/40"
-                    }`}
-                  />
-                  <div>
-                    <span className="font-mono text-sm font-semibold text-wenz-text">
-                      {ver.version}
-                    </span>
-                    <span className="ml-2 text-xs text-wenz-muted">{ver.type}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-wenz-muted">{ver.date}</span>
-                  {ver.active ? (
-                    <span className="rounded bg-wenz-accent/20 px-2 py-0.5 text-xs font-medium text-wenz-accent">
-                      Активная
-                    </span>
-                  ) : (
-                    <button className="rounded bg-white/5 px-2 py-0.5 text-xs font-medium text-wenz-muted transition-colors hover:bg-white/10 hover:text-wenz-text">
-                      Выбрать
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-          <button className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-wenz-border py-2.5 text-xs text-wenz-muted transition-colors hover:border-wenz-accent/30 hover:text-wenz-accent">
-            <Download className="h-3.5 w-3.5" />
-            Скачать другую версию
-          </button>
+      <div className="relative z-10 flex flex-col items-center gap-8 w-full max-w-lg">
+        {/* 3D Skin Viewer */}
+        <div className="w-48 h-64">
+          <SkinViewer username={account.username} width={192} height={256} />
         </div>
 
-        {/* Features */}
-        <div className="space-y-3">
-          <h2 className="mb-1 text-sm font-semibold uppercase tracking-wider text-wenz-muted">
-            Возможности
-          </h2>
-          {features.map((feat) => (
-            <div
-              key={feat.title}
-              className="rounded-xl border border-wenz-border bg-wenz-card p-4 transition-colors hover:border-wenz-accent/20"
-            >
-              <div className="flex items-center gap-2">
-                <feat.icon className="h-4 w-4 text-wenz-accent" />
-                <h3 className="text-sm font-semibold text-wenz-text">
-                  {feat.title}
-                </h3>
-              </div>
-              <p className="mt-1.5 text-xs leading-relaxed text-wenz-muted">
-                {feat.desc}
-              </p>
-            </div>
-          ))}
+        {/* Player name */}
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-white">{account.username}</h2>
+          <p className="text-gray-400 text-sm mt-1">ely.by</p>
         </div>
+
+        {/* Version selector */}
+        <div className="w-full max-w-sm" ref={dropdownRef}>
+          <div className="relative">
+            <button
+              onClick={() => setShowVersions(!showVersions)}
+              disabled={loadingVersions}
+              className="w-full flex items-center justify-between bg-wenz-surface border border-wenz-border rounded-xl px-4 py-3 text-white hover:border-wenz-accent/30 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                {loadingVersions ? (
+                  <Loader2 size={16} className="animate-spin text-gray-400" />
+                ) : selectedVersion ? (
+                  <>
+                    <span className="font-medium">{selectedVersion.id}</span>
+                    {isInstalled && (
+                      <span className="text-xs bg-wenz-accent/20 text-wenz-accent px-2 py-0.5 rounded-full">
+                        установлена
+                      </span>
+                    )}
+                    <span className="text-xs text-gray-500">
+                      {selectedVersion.version_type}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-gray-400">Выберите версию</span>
+                )}
+              </div>
+              <ChevronDown
+                size={16}
+                className={`text-gray-400 transition-transform ${
+                  showVersions ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+
+            {/* Dropdown */}
+            {showVersions && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-wenz-surface border border-wenz-border rounded-xl overflow-hidden shadow-2xl z-50">
+                {/* Snapshot toggle */}
+                <div className="px-4 py-2 border-b border-wenz-border flex items-center justify-between">
+                  <span className="text-sm text-gray-400">Снапшоты</span>
+                  <button
+                    onClick={() => setShowSnapshots(!showSnapshots)}
+                    className={`w-10 h-5 rounded-full transition-colors ${
+                      showSnapshots ? "bg-wenz-accent" : "bg-gray-600"
+                    }`}
+                  >
+                    <div
+                      className={`w-4 h-4 rounded-full bg-white transition-transform ${
+                        showSnapshots ? "translate-x-5" : "translate-x-0.5"
+                      }`}
+                    />
+                  </button>
+                </div>
+                <div className="max-h-64 overflow-y-auto scrollbar-thin">
+                  {filteredVersions.map((v) => {
+                    const installed = installedVersions.includes(v.id);
+                    return (
+                      <button
+                        key={v.id}
+                        onClick={() => {
+                          setSelectedVersion(v);
+                          setShowVersions(false);
+                        }}
+                        className={`w-full flex items-center justify-between px-4 py-2.5 hover:bg-wenz-accent/10 transition-colors text-left ${
+                          selectedVersion?.id === v.id ? "bg-wenz-accent/5" : ""
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-white text-sm">{v.id}</span>
+                          <span className="text-xs text-gray-500">{v.version_type}</span>
+                        </div>
+                        {installed && <Check size={14} className="text-wenz-accent" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Progress bar */}
+        {progress && installing && (
+          <div className="w-full max-w-sm">
+            <div className="bg-wenz-surface border border-wenz-border rounded-xl p-4">
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-white">{progress.stage}</span>
+                <span className="text-gray-400">
+                  {Math.round(progress.progress * 100)}%
+                </span>
+              </div>
+              <div className="w-full bg-wenz-bg rounded-full h-2 overflow-hidden">
+                <div
+                  className="bg-wenz-accent h-full rounded-full transition-all duration-300"
+                  style={{ width: `${progress.progress * 100}%` }}
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-2 truncate">{progress.detail}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Play / Install button */}
+        <button
+          onClick={handleLaunch}
+          disabled={!selectedVersion || installing || launching}
+          className={`w-full max-w-sm py-4 rounded-xl font-bold text-lg transition-all duration-300 flex items-center justify-center gap-3 ${
+            installing
+              ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 cursor-wait"
+              : launching
+              ? "bg-wenz-accent/20 text-wenz-accent border border-wenz-accent/30 cursor-wait"
+              : isInstalled
+              ? "bg-wenz-accent hover:bg-wenz-accent/90 text-wenz-bg hover:shadow-lg hover:shadow-wenz-accent/25 hover:scale-[1.02] active:scale-[0.98]"
+              : "bg-blue-500 hover:bg-blue-600 text-white hover:shadow-lg hover:shadow-blue-500/25 hover:scale-[1.02] active:scale-[0.98]"
+          }`}
+        >
+          {installing ? (
+            <>
+              <Loader2 size={22} className="animate-spin" />
+              Устанавливается...
+            </>
+          ) : launching ? (
+            <>
+              <Loader2 size={22} className="animate-spin" />
+              Запуск...
+            </>
+          ) : isInstalled ? (
+            <>
+              <Play size={22} />
+              ИГРАТЬ
+            </>
+          ) : (
+            <>
+              <Download size={22} />
+              УСТАНОВИТЬ И ИГРАТЬ
+            </>
+          )}
+        </button>
       </div>
     </div>
   );

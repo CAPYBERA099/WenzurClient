@@ -1,82 +1,95 @@
-import { NavLink } from "react-router-dom";
 import {
   Home,
-  Layers,
+  Package,
   Puzzle,
   Shirt,
   Settings,
-  User,
-  ChevronRight,
+  LogOut,
+  Gamepad2,
 } from "lucide-react";
-import { cn } from "../lib/utils";
+import type { Account } from "../App";
 
-const navItems = [
-  { to: "/", icon: Home, label: "Главная" },
-  { to: "/instances", icon: Layers, label: "Сборки" },
-  { to: "/mods", icon: Puzzle, label: "Моды" },
-  { to: "/skins", icon: Shirt, label: "Скины" },
-  { to: "/settings", icon: Settings, label: "Настройки" },
+interface Props {
+  currentPage: string;
+  onPageChange: (page: string) => void;
+  account: Account;
+  onLogout: () => void;
+}
+
+const NAV_ITEMS = [
+  { id: "home", icon: Home, label: "Главная" },
+  { id: "instances", icon: Package, label: "Версии" },
+  { id: "mods", icon: Puzzle, label: "Моды" },
+  { id: "skins", icon: Shirt, label: "Скины" },
+  { id: "settings", icon: Settings, label: "Настройки" },
 ];
 
-export function Sidebar() {
+export default function Sidebar({ currentPage, onPageChange, account, onLogout }: Props) {
+  const skinHeadUrl = `https://skinsystem.ely.by/skins/${account.username}.png`;
+
   return (
-    <aside className="flex w-56 flex-col border-r border-wenz-border bg-wenz-card">
-      {/* Player Card */}
-      <div className="border-b border-wenz-border p-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-wenz-accent/20">
-            <User className="h-5 w-5 text-wenz-accent" />
+    <div className="w-[220px] bg-wenz-surface border-r border-wenz-border flex flex-col">
+      {/* Logo */}
+      <div className="px-4 py-5 border-b border-wenz-border">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-wenz-accent/30 to-wenz-accent/10 flex items-center justify-center border border-wenz-accent/20">
+            <Gamepad2 size={18} className="text-wenz-accent" />
           </div>
-          <div className="flex-1 overflow-hidden">
-            <p className="truncate text-sm font-semibold text-wenz-text">
-              WenzPlayer
-            </p>
-            <p className="text-xs text-wenz-success">● В сети</p>
+          <div>
+            <p className="text-white font-bold text-sm">WenzLauncher</p>
+            <p className="text-gray-500 text-[10px]">v0.1.0</p>
           </div>
         </div>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-1 p-3">
-        {navItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === "/"}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all",
-                isActive
-                  ? "bg-wenz-accent/10 text-wenz-accent"
-                  : "text-wenz-muted hover:bg-white/5 hover:text-wenz-text"
-              )
-            }
+      <nav className="flex-1 px-3 py-4 space-y-1">
+        {NAV_ITEMS.map(({ id, icon: Icon, label }) => (
+          <button
+            key={id}
+            onClick={() => onPageChange(id)}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+              currentPage === id
+                ? "bg-wenz-accent/15 text-wenz-accent"
+                : "text-gray-400 hover:text-white hover:bg-white/5"
+            }`}
           >
-            {({ isActive }) => (
-              <>
-                <item.icon className="h-4 w-4 flex-shrink-0" />
-                <span className="flex-1">{item.label}</span>
-                {isActive && (
-                  <ChevronRight className="h-3.5 w-3.5 text-wenz-accent/60" />
-                )}
-              </>
-            )}
-          </NavLink>
+            <Icon size={18} />
+            <span>{label}</span>
+          </button>
         ))}
       </nav>
 
-      {/* Bottom Status */}
-      <div className="border-t border-wenz-border p-3">
-        <div className="rounded-lg bg-wenz-bg/50 px-3 py-2">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-wenz-muted">RAM</span>
-            <span className="font-mono text-wenz-accent">4096 MB</span>
+      {/* Account */}
+      <div className="px-3 pb-4">
+        <div className="bg-wenz-bg/80 rounded-xl p-3 border border-wenz-border">
+          <div className="flex items-center gap-3 mb-3">
+            {/* Player head from skin */}
+            <div className="w-9 h-9 rounded-lg overflow-hidden bg-wenz-surface border border-wenz-border flex-shrink-0">
+              <img
+                src={skinHeadUrl}
+                alt={account.username}
+                className="w-full h-full object-cover"
+                style={{ imageRendering: "pixelated", objectPosition: "top" }}
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            </div>
+            <div className="min-w-0">
+              <p className="text-white text-sm font-medium truncate">{account.username}</p>
+              <p className="text-gray-500 text-[10px]">ely.by</p>
+            </div>
           </div>
-          <div className="mt-1.5 h-1 rounded-full bg-wenz-border">
-            <div className="h-1 w-1/2 rounded-full bg-wenz-accent" />
-          </div>
+          <button
+            onClick={onLogout}
+            className="w-full flex items-center justify-center gap-2 text-xs text-gray-500 hover:text-red-400 py-1.5 rounded-lg hover:bg-red-500/10 transition-colors"
+          >
+            <LogOut size={12} />
+            Выйти
+          </button>
         </div>
       </div>
-    </aside>
+    </div>
   );
 }

@@ -1,180 +1,212 @@
-import { Search, Download, Check, Star, Filter } from "lucide-react";
+import { useState } from "react";
+import { Search, Download, ExternalLink, Package, Star, Filter } from "lucide-react";
 
 interface Mod {
   id: string;
   name: string;
-  author: string;
   description: string;
+  author: string;
   downloads: string;
-  rating: number;
   category: string;
-  installed: boolean;
   icon: string;
+  url: string;
 }
 
-const mods: Mod[] = [
+const POPULAR_MODS: Mod[] = [
   {
-    id: "1",
+    id: "optifine",
     name: "OptiFine",
+    description: "Оптимизация FPS, шейдеры, HD текстуры, динамическое освещение",
     author: "sp614x",
-    description: "Оптимизация графики, поддержка шейдеров, HD текстур и другие улучшения",
-    downloads: "2.1M",
-    rating: 4.9,
+    downloads: "200M+",
     category: "Оптимизация",
-    installed: true,
-    icon: "🔧",
-  },
-  {
-    id: "2",
-    name: "Sodium",
-    author: "CaffeineMC",
-    description: "Мощная оптимизация рендеринга для значительного увеличения FPS",
-    downloads: "1.8M",
-    rating: 4.8,
-    category: "Оптимизация",
-    installed: true,
     icon: "⚡",
+    url: "https://optifine.net",
   },
   {
-    id: "3",
-    name: "Litematica",
-    author: "masa",
-    description: "Сохраняй и загружай схематики построек прямо в игре",
-    downloads: "890K",
-    rating: 4.7,
-    category: "Утилиты",
-    installed: false,
-    icon: "📐",
+    id: "sodium",
+    name: "Sodium",
+    description: "Мощная оптимизация рендеринга для Fabric/NeoForge",
+    author: "CaffeineMC",
+    downloads: "50M+",
+    category: "Оптимизация",
+    icon: "🧪",
+    url: "https://modrinth.com/mod/sodium",
   },
   {
-    id: "4",
+    id: "fabric-api",
+    name: "Fabric API",
+    description: "Базовая библиотека для модов на Fabric",
+    author: "FabricMC",
+    downloads: "150M+",
+    category: "Библиотека",
+    icon: "🧵",
+    url: "https://modrinth.com/mod/fabric-api",
+  },
+  {
+    id: "iris",
     name: "Iris Shaders",
+    description: "Шейдеры для Fabric/NeoForge, совместимы с Sodium",
     author: "IrisShaders",
-    description: "Шейдеры для Fabric с совместимостью с Sodium",
-    downloads: "1.2M",
-    rating: 4.8,
-    category: "Графика",
-    installed: true,
+    downloads: "30M+",
+    category: "Шейдеры",
     icon: "🌈",
+    url: "https://modrinth.com/mod/iris",
   },
   {
-    id: "5",
-    name: "JourneyMap",
-    author: "techbrew",
-    description: "Полноэкранная и миникарта с отметками и маршрутами",
-    downloads: "1.5M",
-    rating: 4.6,
+    id: "litematica",
+    name: "Litematica",
+    description: "Схемы построек, голограммы, визуализация",
+    author: "masa",
+    downloads: "15M+",
     category: "Утилиты",
-    installed: false,
-    icon: "🗺️",
+    icon: "📐",
+    url: "https://modrinth.com/mod/litematica",
   },
   {
-    id: "6",
-    name: "Create",
-    author: "simibubi",
-    description: "Механизмы, конвейеры, поезда и автоматизация в стиле стимпанк",
-    downloads: "2.3M",
-    rating: 4.9,
-    category: "Контент",
-    installed: false,
-    icon: "⚙️",
+    id: "replay-mod",
+    name: "Replay Mod",
+    description: "Запись и воспроизведение геймплея, кинематографические камеры",
+    author: "CrushedPixel",
+    downloads: "10M+",
+    category: "Утилиты",
+    icon: "🎬",
+    url: "https://modrinth.com/mod/replaymod",
+  },
+  {
+    id: "jei",
+    name: "JEI (Just Enough Items)",
+    description: "Просмотр рецептов крафта, справочник предметов",
+    author: "mezz",
+    downloads: "100M+",
+    category: "Утилиты",
+    icon: "📖",
+    url: "https://modrinth.com/mod/jei",
+  },
+  {
+    id: "xaeros-minimap",
+    name: "Xaero's Minimap",
+    description: "Мини-карта с вейпоинтами, пещерный режим, карта мира",
+    author: "xaero96",
+    downloads: "40M+",
+    category: "Карта",
+    icon: "🗺️",
+    url: "https://modrinth.com/mod/xaeros-minimap",
   },
 ];
 
-const categories = ["Все", "Оптимизация", "Графика", "Утилиты", "Контент", "PvP"];
+const CATEGORIES = ["Все", "Оптимизация", "Шейдеры", "Утилиты", "Библиотека", "Карта"];
 
-export function ModsPage() {
+export default function ModsPage() {
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("Все");
+
+  const filtered = POPULAR_MODS.filter((mod) => {
+    if (search && !mod.name.toLowerCase().includes(search.toLowerCase())) return false;
+    if (category !== "Все" && mod.category !== category) return false;
+    return true;
+  });
+
   return (
-    <div className="animate-fade-in space-y-6">
+    <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-wenz-text">Моды</h1>
-        <p className="mt-1 text-sm text-wenz-muted">
-          Устанавливай и управляй модами
+        <h1 className="text-2xl font-bold text-white">Моды</h1>
+        <p className="text-gray-400 text-sm mt-1">
+          Популярные моды для Minecraft. Скачивайте с Modrinth.
         </p>
       </div>
 
-      {/* Search & Filters */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-wenz-muted" />
+      {/* Search + categories */}
+      <div className="flex gap-3 flex-wrap">
+        <div className="flex-1 min-w-[200px] relative">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
           <input
             type="text"
-            placeholder="Поиск модов..."
-            className="w-full rounded-lg border border-wenz-border bg-wenz-card py-2.5 pl-10 pr-4 text-sm text-wenz-text placeholder-wenz-muted outline-none transition-colors focus:border-wenz-accent/50"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Найти мод..."
+            className="w-full bg-wenz-surface border border-wenz-border rounded-lg pl-10 pr-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-wenz-accent/50"
           />
         </div>
-        <button className="flex items-center gap-2 rounded-lg border border-wenz-border bg-wenz-card px-4 py-2.5 text-sm text-wenz-muted transition-colors hover:border-wenz-accent/30 hover:text-wenz-text">
-          <Filter className="h-4 w-4" />
-          Фильтры
-        </button>
+        <div className="flex gap-1 bg-wenz-surface border border-wenz-border rounded-lg p-1">
+          {CATEGORIES.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setCategory(cat)}
+              className={`px-3 py-1.5 text-xs rounded-md font-medium transition-colors ${
+                category === cat
+                  ? "bg-wenz-accent/20 text-wenz-accent"
+                  : "text-gray-400 hover:text-white"
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Categories */}
-      <div className="flex gap-2">
-        {categories.map((cat, i) => (
-          <button
-            key={cat}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-              i === 0
-                ? "bg-wenz-accent/20 text-wenz-accent"
-                : "bg-wenz-card text-wenz-muted hover:bg-white/5 hover:text-wenz-text"
-            }`}
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
-
-      {/* Mods Grid */}
-      <div className="grid grid-cols-2 gap-4">
-        {mods.map((mod) => (
+      {/* Mod cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {filtered.map((mod) => (
           <div
             key={mod.id}
-            className="rounded-xl border border-wenz-border bg-wenz-card p-4 transition-all hover:border-wenz-accent/20"
+            className="bg-wenz-surface border border-wenz-border rounded-2xl p-5 hover:border-wenz-accent/20 transition-colors group"
           >
-            <div className="flex gap-4">
-              <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-wenz-bg text-2xl">
-                {mod.icon}
-              </div>
-              <div className="flex-1 overflow-hidden">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-semibold text-wenz-text">{mod.name}</h3>
-                    <p className="text-xs text-wenz-muted">от {mod.author}</p>
-                  </div>
-                  <span className="rounded bg-wenz-bg px-2 py-0.5 text-xs text-wenz-muted">
+            <div className="flex items-start gap-4">
+              <div className="text-3xl">{mod.icon}</div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="text-white font-semibold">{mod.name}</h3>
+                  <span className="text-xs bg-wenz-accent/10 text-wenz-accent px-2 py-0.5 rounded-full">
                     {mod.category}
                   </span>
                 </div>
-                <p className="mt-2 text-xs leading-relaxed text-wenz-muted">
-                  {mod.description}
-                </p>
-                <div className="mt-3 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="flex items-center gap-1 text-xs text-wenz-muted">
-                      <Download className="h-3 w-3" />
-                      {mod.downloads}
-                    </span>
-                    <span className="flex items-center gap-1 text-xs text-wenz-warning">
-                      <Star className="h-3 w-3" fill="currentColor" />
-                      {mod.rating}
-                    </span>
-                  </div>
-                  {mod.installed ? (
-                    <span className="flex items-center gap-1 rounded-lg bg-wenz-success/10 px-3 py-1 text-xs font-medium text-wenz-success">
-                      <Check className="h-3 w-3" />
-                      Установлен
-                    </span>
-                  ) : (
-                    <button className="rounded-lg bg-wenz-accent/10 px-3 py-1 text-xs font-medium text-wenz-accent transition-colors hover:bg-wenz-accent/20">
-                      Установить
-                    </button>
-                  )}
+                <p className="text-gray-400 text-sm mb-2">{mod.description}</p>
+                <div className="flex items-center gap-4 text-xs text-gray-500">
+                  <span>by {mod.author}</span>
+                  <span className="flex items-center gap-1">
+                    <Download size={11} />
+                    {mod.downloads}
+                  </span>
                 </div>
               </div>
             </div>
+            <div className="flex justify-end mt-3">
+              <a
+                href={mod.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 bg-wenz-accent/10 hover:bg-wenz-accent/20 text-wenz-accent rounded-lg px-3 py-1.5 text-sm transition-colors"
+              >
+                <ExternalLink size={14} />
+                Открыть
+              </a>
+            </div>
           </div>
         ))}
+      </div>
+
+      {filtered.length === 0 && (
+        <div className="text-center py-12 text-gray-500">
+          <Package size={40} className="mx-auto mb-3 opacity-50" />
+          <p>Моды не найдены</p>
+        </div>
+      )}
+
+      {/* Modrinth link */}
+      <div className="bg-wenz-surface/50 border border-wenz-border rounded-2xl p-6 text-center">
+        <p className="text-gray-400 text-sm mb-3">
+          Больше модов на Modrinth — крупнейшей платформе модов для Minecraft
+        </p>
+        <a
+          href="https://modrinth.com/mods"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-xl px-5 py-2.5 text-sm font-medium transition-colors"
+        >
+          <ExternalLink size={16} />
+          Открыть Modrinth
+        </a>
       </div>
     </div>
   );

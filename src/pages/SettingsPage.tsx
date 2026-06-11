@@ -1,137 +1,247 @@
-import { Monitor, Cpu, HardDrive, FolderOpen, Globe, Palette } from "lucide-react";
+import { useState, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import {
+  Settings,
+  Save,
+  RotateCcw,
+  Cpu,
+  HardDrive,
+  Monitor,
+  Loader2,
+  Check,
+  FolderOpen,
+} from "lucide-react";
 
-interface SettingGroup {
-  title: string;
-  icon: React.ElementType;
-  settings: Setting[];
+interface LauncherConfig {
+  ram_mb: number;
+  java_path: string;
+  game_dir: string;
+  resolution_width: number;
+  resolution_height: number;
+  jvm_args: string;
 }
 
-interface Setting {
-  label: string;
-  description: string;
-  type: "slider" | "select" | "toggle" | "input";
-  value: string;
-}
+export default function SettingsPage() {
+  const [config, setConfig] = useState<LauncherConfig | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [javaInfo, setJavaInfo] = useState("");
 
-const settingGroups: SettingGroup[] = [
-  {
-    title: "Производительность",
-    icon: Cpu,
-    settings: [
-      { label: "Выделенная RAM", description: "Оперативная память для Minecraft", type: "slider", value: "4096 MB" },
-      { label: "Аргументы JVM", description: "Дополнительные параметры Java", type: "input", value: "-XX:+UseG1GC -XX:+UnlockExperimentalVMOptions" },
-      { label: "Разрешение окна", description: "Размер окна при запуске", type: "select", value: "1920x1080" },
-    ],
-  },
-  {
-    title: "Java",
-    icon: Monitor,
-    settings: [
-      { label: "Путь к Java", description: "Авто-определение или ручной путь", type: "input", value: "Авто (Java 21.0.2)" },
-      { label: "Версия Java", description: "Предпочитаемая версия", type: "select", value: "Java 21 (рекомендуется)" },
-    ],
-  },
-  {
-    title: "Хранилище",
-    icon: HardDrive,
-    settings: [
-      { label: "Папка игры", description: "Где хранятся файлы Minecraft", type: "input", value: "~/.wenzlauncher/minecraft" },
-      { label: "Папка сборок", description: "Где хранятся сборки", type: "input", value: "~/.wenzlauncher/instances" },
-    ],
-  },
-  {
-    title: "Интерфейс",
-    icon: Palette,
-    settings: [
-      { label: "Тема", description: "Оформление лаунчера", type: "select", value: "Тёмная" },
-      { label: "Язык", description: "Язык интерфейса", type: "select", value: "Русский" },
-      { label: "Анимации", description: "Плавные переходы и эффекты", type: "toggle", value: "on" },
-    ],
-  },
-];
+  useEffect(() => {
+    loadConfig();
+  }, []);
 
-export function SettingsPage() {
+  const loadConfig = async () => {
+    try {
+      const [cfg, java] = await Promise.all([
+        invoke<LauncherConfig>("get_config"),
+        invoke<string>("get_java_info"),
+      ]);
+      setConfig(cfg);
+      setJavaInfo(java);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!config) return;
+    setSaving(true);
+    try {
+      await invoke("save_config", { config });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      alert(String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReset = () => {
+    setConfig({
+      ram_mb: 4096,
+      java_path: javaInfo === "Java не найдена" ? "java" : javaInfo,
+      game_dir: "",
+      resolution_width: 1920,
+      resolution_height: 1080,
+      jvm_args: "-XX:+UseG1GC -XX:+UnlockExperimentalVMOptions -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20",
+    });
+  };
+
+  const updateConfig = (key: keyof LauncherConfig, value: any) => {
+    if (!config) return;
+    setConfig({ ...config, [key]: value });
+  };
+
+  if (loading || !config) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <Loader2 size={32} className="text-wenz-accent animate-spin" />
+      </div>
+    );
+  }
+
   return (
-    <div className="animate-fade-in space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-wenz-text">Настройки</h1>
-        <p className="mt-1 text-sm text-wenz-muted">
-          Настрой лаунчер под себя
-        </p>
+    <div className="p-6 space-y-6 max-w-2xl">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+            <Settings size={24} className="text-wenz-accent" />
+            Настройки
+          </h1>
+          <p className="text-gray-400 text-sm mt-1">Конфигурация лаунчера и игры</p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={handleReset}
+            className="flex items-center gap-1.5 bg-wenz-surface border border-wenz-border rounded-lg px-3 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+          >
+            <RotateCcw size={14} />
+            Сброс
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-1.5 bg-wenz-accent hover:bg-wenz-accent/90 text-wenz-bg rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+          >
+            {saving ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : saved ? (
+              <Check size={14} />
+            ) : (
+              <Save size={14} />
+            )}
+            {saved ? "Сохранено!" : "Сохранить"}
+          </button>
+        </div>
       </div>
 
-      <div className="space-y-6">
-        {settingGroups.map((group) => (
-          <div
-            key={group.title}
-            className="rounded-xl border border-wenz-border bg-wenz-card"
-          >
-            <div className="flex items-center gap-3 border-b border-wenz-border px-5 py-4">
-              <group.icon className="h-4 w-4 text-wenz-accent" />
-              <h2 className="text-sm font-semibold text-wenz-text">
-                {group.title}
-              </h2>
+      {/* RAM */}
+      <div className="bg-wenz-surface border border-wenz-border rounded-2xl p-6">
+        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <Cpu size={18} className="text-wenz-accent" />
+          Производительность
+        </h3>
+        <div className="space-y-4">
+          <div>
+            <div className="flex justify-between mb-2">
+              <label className="text-sm text-gray-400">Оперативная память (RAM)</label>
+              <span className="text-sm text-wenz-accent font-medium">{config.ram_mb} MB</span>
             </div>
-            <div className="divide-y divide-wenz-border">
-              {group.settings.map((setting) => (
-                <div
-                  key={setting.label}
-                  className="flex items-center justify-between px-5 py-4"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-wenz-text">
-                      {setting.label}
-                    </p>
-                    <p className="mt-0.5 text-xs text-wenz-muted">
-                      {setting.description}
-                    </p>
-                  </div>
-                  <div className="flex-shrink-0">
-                    {setting.type === "toggle" ? (
-                      <button className="h-6 w-11 rounded-full bg-wenz-accent p-0.5 transition-colors">
-                        <div className="h-5 w-5 translate-x-5 rounded-full bg-white shadow transition-transform" />
-                      </button>
-                    ) : setting.type === "slider" ? (
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="range"
-                          min="1024"
-                          max="16384"
-                          defaultValue="4096"
-                          step="512"
-                          className="h-1 w-32 cursor-pointer appearance-none rounded-full bg-wenz-border accent-wenz-accent"
-                        />
-                        <span className="w-20 text-right font-mono text-xs text-wenz-accent">
-                          {setting.value}
-                        </span>
-                      </div>
-                    ) : setting.type === "select" ? (
-                      <select className="rounded-lg border border-wenz-border bg-wenz-bg px-3 py-1.5 text-xs text-wenz-text outline-none focus:border-wenz-accent/50">
-                        <option>{setting.value}</option>
-                      </select>
-                    ) : (
-                      <input
-                        type="text"
-                        defaultValue={setting.value}
-                        className="w-72 rounded-lg border border-wenz-border bg-wenz-bg px-3 py-1.5 text-xs text-wenz-text outline-none transition-colors focus:border-wenz-accent/50"
-                      />
-                    )}
-                  </div>
-                </div>
-              ))}
+            <input
+              type="range"
+              min={1024}
+              max={16384}
+              step={512}
+              value={config.ram_mb}
+              onChange={(e) => updateConfig("ram_mb", parseInt(e.target.value))}
+              className="w-full h-2 bg-wenz-bg rounded-lg appearance-none cursor-pointer accent-wenz-accent"
+            />
+            <div className="flex justify-between text-xs text-gray-600 mt-1">
+              <span>1 GB</span>
+              <span>4 GB</span>
+              <span>8 GB</span>
+              <span>16 GB</span>
             </div>
           </div>
-        ))}
+
+          <div>
+            <label className="text-sm text-gray-400 block mb-2">JVM аргументы</label>
+            <input
+              type="text"
+              value={config.jvm_args}
+              onChange={(e) => updateConfig("jvm_args", e.target.value)}
+              className="w-full bg-wenz-bg border border-wenz-border rounded-lg px-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-wenz-accent/50"
+            />
+          </div>
+        </div>
       </div>
 
-      {/* Save */}
-      <div className="flex justify-end gap-3">
-        <button className="rounded-lg border border-wenz-border px-4 py-2 text-sm text-wenz-muted transition-colors hover:border-wenz-accent/30 hover:text-wenz-text">
-          Сбросить
-        </button>
-        <button className="rounded-lg bg-wenz-accent px-6 py-2 text-sm font-semibold text-wenz-bg transition-colors hover:bg-wenz-accent-hover">
-          Сохранить
-        </button>
+      {/* Java */}
+      <div className="bg-wenz-surface border border-wenz-border rounded-2xl p-6">
+        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <HardDrive size={18} className="text-wenz-accent" />
+          Java и пути
+        </h3>
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm text-gray-400 block mb-2">Путь к Java</label>
+            <input
+              type="text"
+              value={config.java_path}
+              onChange={(e) => updateConfig("java_path", e.target.value)}
+              className="w-full bg-wenz-bg border border-wenz-border rounded-lg px-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-wenz-accent/50"
+              placeholder="java"
+            />
+            <p className="text-xs text-gray-600 mt-1">
+              Найдено: {javaInfo}
+            </p>
+          </div>
+
+          <div>
+            <label className="text-sm text-gray-400 block mb-2 flex items-center gap-1">
+              <FolderOpen size={14} />
+              Директория игры
+            </label>
+            <input
+              type="text"
+              value={config.game_dir}
+              onChange={(e) => updateConfig("game_dir", e.target.value)}
+              className="w-full bg-wenz-bg border border-wenz-border rounded-lg px-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-wenz-accent/50"
+              placeholder="По умолчанию"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Resolution */}
+      <div className="bg-wenz-surface border border-wenz-border rounded-2xl p-6">
+        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <Monitor size={18} className="text-wenz-accent" />
+          Разрешение окна
+        </h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-sm text-gray-400 block mb-2">Ширина</label>
+            <input
+              type="number"
+              value={config.resolution_width}
+              onChange={(e) => updateConfig("resolution_width", parseInt(e.target.value) || 1920)}
+              className="w-full bg-wenz-bg border border-wenz-border rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-wenz-accent/50"
+            />
+          </div>
+          <div>
+            <label className="text-sm text-gray-400 block mb-2">Высота</label>
+            <input
+              type="number"
+              value={config.resolution_height}
+              onChange={(e) => updateConfig("resolution_height", parseInt(e.target.value) || 1080)}
+              className="w-full bg-wenz-bg border border-wenz-border rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-wenz-accent/50"
+            />
+          </div>
+        </div>
+        <div className="flex gap-2 mt-3">
+          {[
+            [1920, 1080, "1080p"],
+            [2560, 1440, "1440p"],
+            [1280, 720, "720p"],
+          ].map(([w, h, label]) => (
+            <button
+              key={String(label)}
+              onClick={() => {
+                updateConfig("resolution_width", w);
+                updateConfig("resolution_height", h);
+              }}
+              className="text-xs bg-wenz-bg border border-wenz-border rounded-lg px-3 py-1.5 text-gray-400 hover:text-white hover:border-wenz-accent/30 transition-colors"
+            >
+              {String(label)}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
