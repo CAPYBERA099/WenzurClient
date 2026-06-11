@@ -1,58 +1,70 @@
-# WenzGuard — Монитор безопасности сессий
+# WenzGuard — Монитор безопасности сессий v2.0
 
-Программа следит за файлами сессий и cookies всех установленных браузеров на Windows. Если стилер или вредоносная программа пытается прочитать или скопировать ваши данные — WenzGuard немедленно предупредит вас.
-
-## Поддерживаемые браузеры
-
-- Google Chrome
-- Microsoft Edge
-- Mozilla Firefox
-- Opera / Opera GX
-- Brave
-- Yandex Browser
-- Vivaldi
+Следит за файлами сессий и токенами **всех** установленных программ на Windows. Если стилер пытается украсть ваши данные — WenzGuard немедленно предупредит.
 
 ## Что отслеживается
 
-- **Cookies** — файлы куки и их журналы
-- **Login Data** — сохранённые пароли
-- **Local State** — мастер-ключ шифрования (критично!)
-- **Sessions** — файлы сессий (текущие вкладки, история сессий)
-- **Web Data** — формы автозаполнения
-- **key4.db / logins.json** — пароли Firefox
+### 🌐 Браузеры
+Chrome, Edge, Firefox, Opera, Opera GX, Brave, Yandex Browser, Vivaldi
+- Cookies, Login Data, Local State (мастер-ключ), сессии
+
+### 💬 Мессенджеры
+- **Telegram Desktop** — tdata (key_data, map, сессии)
+- **Discord** / Canary / PTB — токены (LevelDB)
+- **WhatsApp Desktop** — профиль, базы данных
+- **Signal** — config.json, db.sqlite
+- **Viber** — viber.db, config
+- **Skype** — Local Storage
+- **Element (Matrix)** — Local Storage
+- **ICQ** — auth_token
+
+### 🎮 Игровые платформы
+- **Steam** — ssfn файлы, loginusers.vdf, config.vdf
+- **Epic Games** — настройки аккаунта
+- **Minecraft** — launcher_accounts.json
+- **Riot Games** (Valorant/LoL) — приватные настройки
+- **Battle.net** — config
+- **Ubisoft Connect** — user.dat
+- **EA App** — user config
+
+### 💰 Крипто-кошельки
+- **Exodus** — seed.seco, passphrase.json
+- **Atomic Wallet** — LevelDB
+- **Electrum** — файлы кошельков
+- **MetaMask** (расширение Chrome) — LevelDB
+
+### 🔒 VPN
+- **NordVPN**, **ProtonVPN** — user.config
+- **OpenVPN** — .ovpn профили
+
+### 📁 Другие
+- **FileZilla** — сохранённые FTP серверы и пароли
+- **WinSCP** — SSH/SCP пароли
+- **Outlook** / **Thunderbird** — почтовые базы
+- **Authy** — 2FA токены
+- **OBS Studio** — stream key
+- **Git** — .git-credentials
 
 ## Как работает
 
-1. **Обнаружение браузеров** — автоматически находит все профили
-2. **Мониторинг файлов** — через Windows API `ReadDirectoryChangesW` следит за изменениями
-3. **Сканирование процессов** — каждые 30 секунд проверяет запущенные процессы на подозрительные (известные стилеры, запуск из Temp)
-4. **Оповещение** — звуковой сигнал + всплывающее окно при обнаружении угрозы
-5. **Логирование** — все события записываются в `wenzguard.log`
+1. **Обнаружение** — автоматически находит все профили
+2. **Мониторинг** — `ReadDirectoryChangesW` следит за изменениями в реальном времени
+3. **Сканирование** — каждые 30 сек проверяет процессы на стилеры
+4. **Оповещение** — звук + всплывающее окно + лог
 
 ## Сборка
-
-Требуется CMake 3.15+ и компилятор C++17 (Visual Studio 2019+).
 
 ```cmd
 cmake -B build
 cmake --build build --config Release
 ```
 
-Готовый exe будет в `build\Release\WenzGuard.exe`
-
 ## Запуск
 
 ```cmd
-WenzGuard.exe              # Полный мониторинг с уведомлениями
-WenzGuard.exe --silent     # Без всплывающих окон (только консоль + лог)
-WenzGuard.exe --scan-only  # Однократное сканирование процессов
-WenzGuard.exe --help       # Справка
+WenzGuard.exe              :: полный мониторинг
+WenzGuard.exe --silent     :: без всплывающих окон
+WenzGuard.exe --scan-only  :: только сканирование процессов
 ```
 
-Для автозапуска: добавьте ярлык в `shell:startup` (Win+R → `shell:startup`).
-
-## Уровни угроз
-
-- 🔴 **КРИТИЧНО** — обращение к Cookies, Login Data, Local State, key4.db
-- 🟡 **СЕССИЯ** — обращение к файлам сессий и вкладок
-- 🔵 **ИНФО** — прочие изменения в профиле браузера
+Автозапуск: `Win+R` → `shell:startup` → ярлык на `WenzGuard.exe`
