@@ -14,6 +14,8 @@
 #include <string>
 #include <thread>
 #include <atomic>
+#include <algorithm>
+#include <map>
 
 #include "browser_paths.h"
 #include "monitor.h"
